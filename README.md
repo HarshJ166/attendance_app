@@ -18,6 +18,13 @@ Selfie + GPS attendance for small teams. An employee taps **Mark attendance**. T
 - Selfies are deleted automatically after 90 days (R2 lifecycle rule).
 
 ## Run locally
+One command starts all three (API :8787, admin :5173, Expo :8081). Ctrl+C stops everything:
+```bash
+./start.sh               # Expo in front: QR code, press r to reload the phone app
+./start.sh --headless    # all three in the background
+./start.sh --no-mobile   # API + admin only
+```
+Or start each one yourself:
 ```bash
 cd api && npm install && npm run migrate && npm run dev        # needs api/.env (see api/.env.example)
 cd admin && npm install && npx vite                             # http://localhost:5173
