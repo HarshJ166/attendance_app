@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+.auth0-cli/
+.cf-home/
+.gcloud/
+.expo/
+*.apk
+*.aab
+.DS_Store
+.neon-cli/
+.expo-home/
+qa/out/

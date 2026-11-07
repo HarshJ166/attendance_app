@@ -1,0 +1,28 @@
+{
+  "name": "geomark-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file=.env src/index.ts",
+    "start": "node --env-file=.env dist/index.js",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --import tsx src/**/*.test.ts",
+    "migrate": "tsx --env-file=.env src/db/migrate.ts",
+    "smoke:r2": "tsx --env-file=.env scripts/r2-smoke.ts",
+    "itest": "bash scripts/itest.sh"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1164.0",
+    "@aws-sdk/s3-request-presigner": "^3.1164.0",
+    "@hono/node-server": "^2.1.6",
+    "hono": "^4.13.17",
+    "jose": "^6.2.15",
+    "postgres": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

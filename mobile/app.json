@@ -1,0 +1,75 @@
+{
+  "expo": {
+    "name": "GeoMark",
+    "slug": "attendance-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.jajal.geomark"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0B6B4B",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.jajal.geomark",
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_BACKGROUND_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "owner": "harsh268s-team",
+    "extra": {
+      "eas": {
+        "projectId": "8f7fedde-fe7e-469d-b841-3c1d07c02bfc"
+      },
+      "auth0": {
+        "domain": "dev-geomark.jp.auth0.com",
+        "clientId": "T1FFcHDPO3CwmU7dcQG8meqeHZjx8Yqa",
+        "audience": "https://attendance-api"
+      }
+    },
+    "plugins": [
+      [
+        "react-native-auth0",
+        {
+          "domain": "dev-geomark.jp.auth0.com",
+          "customScheme": "geomark"
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "GeoMark takes a selfie only when you tap Mark attendance.",
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "GeoMark checks your location only when you tap Mark attendance.",
+          "isAndroidBackgroundLocationEnabled": false
+        }
+      ],
+      "expo-font",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          }
+        }
+      ]
+    ]
+  }
+}
