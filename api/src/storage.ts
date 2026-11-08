@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { CopyObjectCommand, DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const Bucket = process.env.R2_BUCKET ?? 'attendance-selfies';
@@ -52,4 +52,19 @@ export async function exists(Key: string): Promise<boolean> {
 /** Remove a selfie (e.g. the check-in was blocked, so we must not keep the photo). */
 export async function remove(Key: string): Promise<void> {
   await s3.send(new DeleteObjectCommand({ Bucket, Key }));
+}
+
+export const newProfileKey = (userId: number) => `profiles/${userId}/${randomUUID()}.jpg`;
+export function isOwnProfileKey(key: unknown, userId: number): key is string {
+  return typeof key === 'string' && new RegExp(`^profiles/${userId}/[0-9a-f-]{36}\\.jpg$`).test(key);
+}
+
+export async function getBytes(Key: string): Promise<Uint8Array> {
+  const r = await s3.send(new GetObjectCommand({ Bucket, Key }));
+  return r.Body!.transformToByteArray();
+}
+
+/** Copy a check-in selfie to profiles/ so it survives the 90-day selfie clean-up. */
+export async function copy(fromKey: string, toKey: string): Promise<void> {
+  await s3.send(new CopyObjectCommand({ Bucket, Key: toKey, CopySource: `${Bucket}/${fromKey}`, ContentType: 'image/jpeg', MetadataDirective: 'REPLACE' }));
 }

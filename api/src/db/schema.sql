@@ -118,3 +118,14 @@ create table if not exists holidays (
   created_by  integer references users(id) on delete set null,
   created_at  timestamptz not null default now()
 );
+
+-- ===== Face matching + employee photo (2026-11-08) =====
+-- HR-chosen profile photo (R2 key under profiles/, NOT auto-deleted) and its SFace fingerprint (128 numbers).
+-- Biometric data (DPDP): removed when the person is turned off.
+alter table users add column if not exists photo_key text;
+alter table users add column if not exists face_embedding real[];
+alter table users add column if not exists photo_updated_at timestamptz;
+-- Consent text version the person agreed to. 2 = includes face matching; older agreements are asked again.
+alter table users add column if not exists consent_version integer not null default 1;
+-- Cosine similarity between the check-in selfie and the profile photo (null = no profile photo / not checked).
+alter table attendance add column if not exists face_score real;

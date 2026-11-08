@@ -183,3 +183,15 @@ test('mapplsShortAddress keeps the useful parts and the PIN', async () => {
   );
   assert.equal(mapplsShortAddress({ formatted_address: 'Fallback Road, Mumbai' }), 'Fallback Road, Mumbai');
 });
+
+test('face: cosine maths, threshold, and plain-language retake messages', async () => {
+  const { cosine, faceProblem, FACE_MATCH_THRESHOLD } = await import('./face.js');
+  assert.equal(cosine([1, 0], [1, 0]), 1);
+  assert.equal(cosine([1, 0], [0, 1]), 0);
+  assert.ok(Math.abs(cosine([1, 2, 3], [2, 4, 6]) - 1) < 1e-9); // scale doesn't matter
+  assert.equal(cosine([0, 0], [1, 1]), 0); // no division by zero
+  assert.equal(FACE_MATCH_THRESHOLD, 0.4);
+  assert.equal(faceProblem({ faces: 1, score: 0.9, embedding: [] }), null);
+  assert.match(faceProblem({ faces: 0 })!, /couldn’t see your face/);
+  assert.match(faceProblem({ faces: 2 })!, /Only you/);
+});

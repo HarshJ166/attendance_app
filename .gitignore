@@ -15,3 +15,4 @@ dist/
 qa/out/
 face/.venv/
 face/__pycache__/
+face/models/

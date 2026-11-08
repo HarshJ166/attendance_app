@@ -33,7 +33,7 @@ const step = async (name: string, fn: () => Promise<void>) => { await fn(); pass
 
 // --- seed: users appear on first authenticated call; then consent + places ---
 for (const t of [ADMIN, E1, E2]) assert.equal((await call(t, 'GET', '/me')).status, 200);
-await sql`update users set consented_at = now() where auth0_sub like 'test|%'`;
+await sql`update users set consented_at = now(), consent_version = 2 where auth0_sub like 'test|%'`;
 const [{ id: e1 }] = await sql`select id from users where auth0_sub = 'test|e1'`;
 const [{ id: e2 }] = await sql`select id from users where auth0_sub = 'test|e2'`;
 const [{ id: adminId }] = await sql`select id from users where auth0_sub = 'test|admin'`;
@@ -201,6 +201,74 @@ await step('repeat requests no longer burn user ids', async () => {
   for (let i = 0; i < 5; i++) await call(E1, 'GET', '/me');
   const [{ last_value: b }] = await sql`select last_value from users_id_seq`;
   assert.equal(Number(b), Number(a));
+});
+
+await step('face: profile photo, same person matches, stranger flagged, no-face refused (live R2 + face service)', async () => {
+  const dir = process.env.FACE_TEST_DIR;
+  if (!dir || !(await fetch(`${process.env.FACE_URL}/health`).then((r) => r.ok).catch(() => false))) {
+    console.log('     (skipped: set FACE_TEST_DIR and run the face service)');
+    return;
+  }
+  const { readFileSync } = await import('node:fs');
+  const { remove } = await import('../src/storage.js');
+  const img = (n: string) => readFileSync(`${dir}/${n}`);
+  const put = async (url: string, bytes: Buffer) => assert.equal((await fetch(url, { method: 'PUT', headers: { 'content-type': 'image/jpeg' }, body: bytes })).status, 200);
+  const cleanup: string[] = [];
+  const E3 = await tokenFor('test|e3', ['employee'], 'Stranger Test');
+  await call(E3, 'GET', '/me');
+  await sql`update users set consented_at = now(), consent_version = 2 where auth0_sub = 'test|e3'`;
+  const [{ id: e3 }] = await sql`select id from users where auth0_sub = 'test|e3'`;
+  await call(ADMIN, 'PATCH', `/admin/employees/${e3}`, { site_ids: [officeId] });
+
+  const setPhoto = async (uid: number, file: string) => {
+    const u = await call(ADMIN, 'POST', `/admin/employees/${uid}/photo-upload-url`, { bytes: img(file).length });
+    await put(u.json.url, img(file));
+    return call(ADMIN, 'POST', `/admin/employees/${uid}/photo`, { key: u.json.key });
+  };
+  const checkIn = async (token: string, file: string) => {
+    const fix = { ...OFFICE, accuracy_m: 10, mocked: false };
+    const u = await call(token, 'POST', '/selfie-upload-url', { bytes: img(file).length, ...fix });
+    assert.equal(u.status, 200, JSON.stringify(u.json));
+    await put(u.json.url, img(file));
+    cleanup.push(u.json.key);
+    return call(token, 'POST', '/attendance', { ...fix, photo_key: u.json.key });
+  };
+  try {
+    assert.equal((await setPhoto(e2, 'noface.jpg')).status, 400); // a profile photo must show a face
+    const p2 = await setPhoto(e2, 'person.jpg');
+    assert.equal(p2.status, 200, JSON.stringify(p2.json));
+    assert.equal((await setPhoto(e3, 'person.jpg')).status, 200);
+
+    const refused = await checkIn(E3, 'noface.jpg');
+    assert.equal(refused.status, 400);
+    assert.equal(refused.json.error, 'face_unclear');
+
+    const same = await checkIn(E2, 'person-again.jpg');
+    assert.equal(same.status, 201, JSON.stringify(same.json));
+    assert.ok(same.json.attendance.face_score >= 0.4, `same person scored ${same.json.attendance.face_score}`);
+    assert.ok(!same.json.attendance.flags.includes('face_mismatch'));
+
+    const stranger = await checkIn(E3, 'stranger.jpg');
+    assert.equal(stranger.status, 201);
+    assert.ok(stranger.json.attendance.face_score < 0.4, `stranger scored ${stranger.json.attendance.face_score}`);
+    assert.equal(stranger.json.attendance.status, 'flagged');
+    assert.ok(stranger.json.attendance.flags.includes('face_mismatch'));
+    console.log(`     same person ${same.json.attendance.face_score} · stranger ${stranger.json.attendance.face_score}`);
+
+    const detail = await call(ADMIN, 'GET', `/admin/attendance/${stranger.json.attendance.id}`);
+    assert.ok(detail.json.profile_photo_url && detail.json.attendance.photo_url);
+    assert.equal(detail.json.face_threshold, 0.4);
+
+    // Turning someone off deletes their photo + face data.
+    await sql`update users set auth0_sub = auth0_sub where id = ${e3}`;
+    await call(ADMIN, 'DELETE', `/admin/employees/${e3}/photo`);
+    const [gone] = await sql`select photo_key, face_embedding from users where id = ${e3}`;
+    assert.deepEqual([gone.photo_key, gone.face_embedding], [null, null]);
+  } finally {
+    for (const k of cleanup) await remove(k).catch(() => undefined);
+    await call(ADMIN, 'DELETE', `/admin/employees/${e2}/photo`).catch(() => undefined);
+    await call(ADMIN, 'DELETE', `/admin/employees/${e3}/photo`).catch(() => undefined);
+  }
 });
 
 await step('a deactivated employee is locked out of the app', async () => {

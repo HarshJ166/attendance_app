@@ -33,7 +33,11 @@ export function Consent({ onAgree, onLogout }: { onAgree: () => Promise<void>; o
         <T style={{ fontFamily: font.bodyBold }}>Mark attendance</T>.
       </T>
       <T>It is used only to record your attendance for HR.</T>
-      <T>Photos are deleted automatically after 90 days.</T>
+      <T>
+        To confirm it is really you, your selfie is compared with the profile photo HR keeps for you (face matching).
+        Only the comparison result is stored with your attendance.
+      </T>
+      <T>Check-in selfies are deleted automatically after 90 days. Your profile photo and face data are deleted when you leave.</T>
       {error ? <T style={{ color: color.danger }}>{error}</T> : null}
     </Screen>
   );

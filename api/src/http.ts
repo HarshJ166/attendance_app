@@ -7,8 +7,11 @@ import { viewUrl } from './storage.js';
 
 export type User = {
   id: number; auth0_sub: string; email: string | null; name: string;
-  consented_at: Date | null; created_at: Date; active: boolean;
+  consented_at: Date | null; consent_version: number; created_at: Date; active: boolean;
+  face_embedding: number[] | null;
 };
+/** Consent text the app shows now. 2 added face matching; anyone on an older version is asked again. */
+export const CONSENT_VERSION = 2;
 export type Env = { Variables: { identity: Identity; user: User } };
 
 export const todayIst = () => sql`(now() at time zone 'Asia/Kolkata')::date`;
@@ -31,7 +34,7 @@ export const auth = createMiddleware<Env>(async (c, next) => {
   }
 
   // Look up first; insert only brand-new people. (An upsert on every request burned a serial id each time.)
-  const COLS = sql`id, auth0_sub, email, name, consented_at, created_at, active`;
+  const COLS = sql`id, auth0_sub, email, name, consented_at, consent_version, created_at, active, face_embedding`;
   let [user] = await sql<User[]>`select ${COLS} from users where auth0_sub = ${identity.sub}`;
   if (!user) {
     [user] = await sql<User[]>`
@@ -62,7 +65,7 @@ export const placesOf = (userId: number) => sql<Site[]>`
 
 export const ATTENDANCE_COLUMNS = sql`
   a.id, a.user_id, a.day::text as day, a.marked_at, a.status, a.flags, a.distance_m, a.lat, a.lng, a.accuracy_m,
-  a.address, a.photo_key, a.late_min, a.reviewed_at, a.review_note,
+  a.address, a.photo_key, a.late_min, a.reviewed_at, a.review_note, a.face_score,
   s.name as site_name, s.kind as site_kind, s.lat as site_lat, s.lng as site_lng, s.radius_m as site_radius_m`;
 
 /** Company holidays in a month ("2026-11") → Map(day → name). */

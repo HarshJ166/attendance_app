@@ -81,11 +81,11 @@ export type Today = {
 export type Checkin = {
   id: number; user_id: number; day: string; marked_at: string; status: 'present' | 'flagged' | 'rejected'; flags: string[];
   distance_m: number | null; lat: number; lng: number; accuracy_m: number; address: string | null; late_min: number;
-  reviewed_at: string | null; review_note: string | null; reviewed_by_name?: string | null;
+  reviewed_at: string | null; review_note: string | null; reviewed_by_name?: string | null; face_score: number | null;
   site_name: string | null; site_kind: 'office' | 'home' | null; photo_url: string | null;
   name: string; email: string | null; employee_code: string | null;
 };
-export type CheckinDetail = { attendance: Checkin; places: Place[]; attempts: { at: string; reason: string; distance_m: number | null; lat: number; lng: number; site_name: string | null }[] };
+export type CheckinDetail = { attendance: Checkin; profile_photo_url: string | null; face_threshold: number; places: Place[]; attempts: { at: string; reason: string; distance_m: number | null; lat: number; lng: number; site_name: string | null }[] };
 
 // ---------- formatting (IST, the company's clock) ----------
 const IST = 'Asia/Kolkata';

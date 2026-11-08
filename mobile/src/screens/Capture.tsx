@@ -166,6 +166,19 @@ export function Capture({ getToken, onDone, onCancel }: {
       onDone(attendance);
     } catch (e) {
       if (e instanceof ApiError && e.code === 'already_marked') return onDone(null);
+      if (e instanceof ApiError && (e.code === 'face_unclear' || e.code === 'face_multiple')) {
+        // The server already deleted that selfie; go straight back to the camera.
+        setPhoto(null);
+        setCameraReady(false);
+        setPhase('camera');
+        setTrouble({
+          title: e.code === 'face_unclear' ? 'We couldn’t see your face' : 'Only you in the selfie, please',
+          message: e.message,
+          action: 'Take it again',
+          onAction: () => setTrouble(null),
+        });
+        return;
+      }
       setPhase('preview');
       setTrouble({
         title: e instanceof ApiError && e.code === 'offline' ? 'No internet' : e instanceof ApiError && e.status === 403 ? "Can't mark attendance here" : 'Could not mark attendance',

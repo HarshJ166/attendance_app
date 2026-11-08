@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { placeLabel, time, useApi, useLoad, type Place } from '../api';
 import { Icon } from '../components/Icon';
+import { Avatar } from '../components/Avatar';
 import { ImportEmployees } from '../components/ImportEmployees';
 
 type Emp = {
   id: number; name: string; email: string | null; employee_code: string | null; phone: string | null; designation: string | null;
-  role: 'employee' | 'admin'; active: boolean; created_at: string; places: { id: number; name: string; kind: 'office' | 'home' }[]; last_check_in: string | null;
+  role: 'employee' | 'admin'; active: boolean; created_at: string; photo_url: string | null; places: { id: number; name: string; kind: 'office' | 'home' }[]; last_check_in: string | null;
 };
 
 export function Employees() {
@@ -122,9 +123,14 @@ export function Employees() {
                     <input type="checkbox" aria-label={`Select ${e.name}`} checked={picked.has(e.id)}
                       onChange={(ev) => { const n = new Set(picked); if (ev.target.checked) n.add(e.id); else n.delete(e.id); setPicked(n); }} />
                   </td>
-                  <td className="who">
-                    <b><a href={`#/employees/${e.id}`} onClick={(ev) => ev.stopPropagation()} style={{ color: 'inherit' }}>{e.name || e.email}</a></b>
-                    <span>{[e.employee_code, e.email].filter(Boolean).join(' · ')}</span>
+                  <td>
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                      <Avatar name={e.name || e.email || '?'} url={e.photo_url} />
+                      <div className="who">
+                        <b><a href={`#/employees/${e.id}`} onClick={(ev) => ev.stopPropagation()} style={{ color: 'inherit' }}>{e.name || e.email}</a></b>
+                        <span>{[e.employee_code, e.email].filter(Boolean).join(' · ')}</span>
+                      </div>
+                    </div>
                   </td>
                   <td>{e.designation ?? <span className="muted">–</span>}{e.role === 'admin' ? <div><span className="chip off small">HR admin</span></div> : null}</td>
                   <td>{e.places.length ? e.places.map((p) => placeLabel(p.name, p.kind)).join(', ') : <span className="chip absent">No place: can’t check in</span>}</td>

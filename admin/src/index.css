@@ -238,3 +238,10 @@ button.cal-day:hover { outline: 2px solid var(--ink); }
 .filter-bar select.input { min-width: 150px; }
 .bulk-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: var(--present-tint); border-radius: var(--radius); padding: 10px 14px; position: sticky; top: 8px; z-index: 5; }
 .bulk-bar select.input { min-height: 36px; }
+
+/* face compare in the View panel */
+.face-compare { display: grid; grid-template-columns: 120px 1fr; gap: 16px; align-items: center; border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
+.face-ref { display: grid; gap: 4px; justify-items: center; }
+.face-ref img, .face-ref-empty { width: 120px; height: 120px; border-radius: 12px; object-fit: cover; background: var(--muted-tint); }
+.face-ref-empty { display: grid; place-items: center; font-size: 13px; color: var(--muted); text-align: center; padding: 8px; }
+label.btn[aria-disabled='true'] { opacity: 0.6; pointer-events: none; }

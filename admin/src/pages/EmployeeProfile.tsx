@@ -3,11 +3,13 @@ import { distance, REASON, time, useApi, useLoad, type Place } from '../api';
 import { CheckinPanel } from '../components/CheckinPanel';
 import { CELL, thisMonth } from '../calendar';
 import { MonthSwitch } from '../components/MonthSwitch';
+import { Avatar } from '../components/Avatar';
+import { toSmallJpeg } from '../photo';
 import { PlaceEditor } from './Places';
 
 type Day = { day: string; weekday: number; kind: string; holiday?: string | null; rejected: boolean; late_min: number; attendance_id: number | null; marked_at: string | null; site_name: string | null; site_kind: string | null; distance_m: number | null };
 type Profile = {
-  employee: { id: number; name: string; email: string | null; employee_code: string | null; phone: string | null; designation: string | null; role: 'employee' | 'admin'; active: boolean; created_at: string; consented_at: string | null };
+  employee: { id: number; name: string; email: string | null; employee_code: string | null; phone: string | null; designation: string | null; role: 'employee' | 'admin'; active: boolean; created_at: string; consented_at: string | null; photo_url: string | null; photo_updated_at: string | null; has_face: boolean };
   places: Place[];
   month: string;
   days: Day[];
@@ -53,9 +55,13 @@ export function EmployeeProfile({ id }: { id: number }) {
     <div className="page">
       <a href="#/employees">← Employees</a>
       <div className="toolbar">
-        <div style={{ display: 'grid', gap: 4 }}>
-          <h1>{e.name}</h1>
-          <div className="muted">{[e.designation, e.employee_code, e.role === 'admin' ? 'HR admin' : null].filter(Boolean).join(' · ')}</div>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+          <Avatar name={e.name} url={e.photo_url} size={72} />
+          <div style={{ display: 'grid', gap: 4 }}>
+            <h1>{e.name}</h1>
+            <div className="muted">{[e.designation, e.employee_code, e.role === 'admin' ? 'HR admin' : null].filter(Boolean).join(' · ')}</div>
+            <div className="small">{e.has_face ? <span className="chip present"><span className="g">✓</span>Face matching on</span> : <span className="chip off">No photo: face matching off</span>}</div>
+          </div>
         </div>
         {e.active ? <span className="chip present">Active</span> : <span className="chip off">Turned off: can’t log in</span>}
       </div>
@@ -68,6 +74,8 @@ export function EmployeeProfile({ id }: { id: number }) {
           <div><button className="btn small" onClick={() => void navigator.clipboard.writeText(msg.link!)}>Copy link</button></div>
         </div>
       ) : null}
+
+      {e.active ? <PhotoCard employeeId={e.id} name={e.name} url={e.photo_url} updatedAt={e.photo_updated_at} onChanged={reload} /> : null}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24, alignItems: 'start' }}>
         <DetailsForm key={JSON.stringify(e)} e={e} busy={busy} onSave={(b) => void patch(b, 'Details saved.')} />
@@ -200,5 +208,56 @@ function DetailsForm({ e, busy, onSave }: { e: Profile['employee']; busy: boolea
       <div><button className="btn" type="submit" disabled={busy || !dirty}>Save details</button></div>
       <span className="small muted">Email is their login and can’t be changed here.</span>
     </form>
+  );
+}
+
+/** Upload / replace / remove the profile photo. It must show exactly one clear face (checked by the server). */
+function PhotoCard({ employeeId, name, url, updatedAt, onChanged }: { employeeId: number; name: string; url: string | null; updatedAt: string | null; onChanged: () => void }) {
+  const api = useApi();
+  const [state, setState] = useState<{ busy?: string; ok?: string; err?: string }>({});
+
+  async function upload(file: File) {
+    setState({ busy: 'Checking the face…' });
+    try {
+      const jpeg = await toSmallJpeg(file);
+      const { url: putUrl, key } = await api<{ url: string; key: string }>(`/admin/employees/${employeeId}/photo-upload-url`, { body: { bytes: jpeg.size } });
+      const put = await fetch(putUrl, { method: 'PUT', headers: { 'content-type': 'image/jpeg' }, body: jpeg });
+      if (!put.ok) throw new Error('Upload failed. Try again.');
+      await api(`/admin/employees/${employeeId}/photo`, { body: { key } });
+      setState({ ok: `Photo saved. ${name}’s check-ins will now be compared with it.` });
+      onChanged();
+    } catch (e) {
+      setState({ err: (e as Error).message });
+    }
+  }
+
+  return (
+    <section className="card" style={{ display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+      <Avatar name={name} url={url} size={112} />
+      <div style={{ display: 'grid', gap: 8, flex: 1, minWidth: 240 }}>
+        <h2>Profile photo</h2>
+        <span className="small muted">
+          Used to check that the person in each check-in selfie is {name}. Use a clear, front-facing photo with only their face.
+          {updatedAt ? ` Last changed ${new Date(updatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}.` : ''}
+        </span>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <label className="btn" aria-disabled={!!state.busy}>
+            {state.busy ?? (url ? 'Replace photo' : 'Upload photo')}
+            <input type="file" accept="image/*" hidden disabled={!!state.busy} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void upload(f); }} />
+          </label>
+          {url ? (
+            <button className="btn danger" disabled={!!state.busy} onClick={async () => {
+              if (!window.confirm(`Remove ${name}’s photo? Face matching stops for them until a new one is added.`)) return;
+              await api(`/admin/employees/${employeeId}/photo`, { method: 'DELETE' });
+              setState({ ok: 'Photo removed. Face matching is off for them.' });
+              onChanged();
+            }}>Remove photo</button>
+          ) : null}
+        </div>
+        <span className="small muted">Or open any of their check-ins below and choose “Use this selfie as profile photo”.</span>
+        {state.ok ? <div className="notice" style={{ background: 'var(--present-tint)', color: 'var(--present)' }}>{state.ok}</div> : null}
+        {state.err ? <div className="notice error">{state.err}</div> : null}
+      </div>
+    </section>
   );
 }

@@ -3,7 +3,7 @@ import { distance, longDate, placeLabel, REASON, time, useApi, useLoad, type Che
 import { CheckinMap } from './CheckinMap';
 import { StatusChip } from './StatusChip';
 
-const FLAG: Record<string, string> = { low_accuracy: 'Weak GPS signal' };
+const FLAG: Record<string, string> = { low_accuracy: 'Weak GPS signal', face_mismatch: 'Face didn’t match the profile photo' };
 
 /** Side panel: selfie with geo-stamp, facts, map with all their places, blocked attempts, HR review. */
 type Nav = { label: string; prev: (() => void) | null; next: (() => void) | null };
@@ -77,6 +77,12 @@ export function CheckinPanel({ id, onClose, onReviewed, nav }: { id: number; onC
               {a.late_min > 0 && a.status !== 'rejected' ? <span className="chip late"><span className="g">!</span>Late {a.late_min} min</span> : null}
             </div>
 
+            <FaceCompare profileUrl={data.profile_photo_url} score={a.face_score} threshold={data.face_threshold}
+              onUseAsProfile={async () => {
+                await api(`/admin/employees/${a.user_id}/photo`, { body: { attendance_id: a.id } });
+                reload();
+              }} />
+
             <figure className="stamp" style={{ margin: 0 }}>
               {a.photo_url ? <img src={a.photo_url} alt={`Attendance selfie of ${a.name}`} /> : <div className="empty" style={{ color: '#fff' }}>Photo not available</div>}
               <figcaption className="stamp-text">
@@ -142,5 +148,39 @@ export function CheckinPanel({ id, onClose, onReviewed, nav }: { id: number; onC
         ) : null}
       </aside>
     </>
+  );
+}
+
+/** Profile photo beside the score, so HR can judge the match by eye too. */
+function FaceCompare({ profileUrl, score, threshold, onUseAsProfile }: {
+  profileUrl: string | null; score: number | null; threshold: number; onUseAsProfile: () => Promise<void>;
+}) {
+  const [state, setState] = useState<{ busy?: boolean; err?: string; ok?: boolean }>({});
+  const use = async () => {
+    setState({ busy: true });
+    try { await onUseAsProfile(); setState({ ok: true }); } catch (e) { setState({ err: (e as Error).message }); }
+  };
+  const matched = score !== null && score >= threshold;
+  return (
+    <section className="face-compare" aria-label="Face check">
+      <div className="face-ref">
+        {profileUrl ? <img src={profileUrl} alt="Profile photo" /> : <div className="face-ref-empty">No profile photo</div>}
+        <span className="small muted">Profile photo</span>
+      </div>
+      <div style={{ display: 'grid', gap: 6, alignContent: 'center' }}>
+        {score === null ? (
+          <span className="small muted">{profileUrl ? 'Not compared (face service was offline).' : 'Add a profile photo to turn on face matching for this person.'}</span>
+        ) : (
+          <>
+            <span className={`chip ${matched ? 'present' : 'absent'}`}><span className="g" aria-hidden="true">{matched ? '✓' : '!'}</span>{matched ? 'Face matches' : 'Face doesn’t match'}</span>
+            <span className="small muted num">Similarity {score.toFixed(2)} (match from {threshold.toFixed(2)})</span>
+          </>
+        )}
+        <button className="btn secondary small" onClick={() => void use()} disabled={state.busy || state.ok} style={{ justifySelf: 'start' }}>
+          {state.ok ? 'Profile photo updated' : state.busy ? 'Saving…' : 'Use this selfie as profile photo'}
+        </button>
+        {state.err ? <span className="small" style={{ color: 'var(--danger)' }}>{state.err}</span> : null}
+      </div>
+    </section>
   );
 }

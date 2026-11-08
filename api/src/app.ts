@@ -4,9 +4,10 @@ import { logger } from 'hono/logger';
 import { admin } from './admin.js';
 import { sql } from './db/index.js';
 import { addressFor } from './places.js';
-import { ATTENDANCE_COLUMNS, auth, DAY, holidayOn, holidaysIn, MONTH, placesOf, todayIst, withPhoto, type Env } from './http.js';
+import { ATTENDANCE_COLUMNS, auth, CONSENT_VERSION, DAY, holidayOn, holidaysIn, MONTH, placesOf, todayIst, withPhoto, type Env } from './http.js';
+import { cosine, embedJpeg, FACE_MATCH_THRESHOLD, faceProblem } from './face.js';
 import { blockMessage, classify, minutesLate, monthDays, parseFix, type Marked } from './rules.js';
-import { exists, isOwnSelfieKey, istDay, MAX_SELFIE_BYTES, newSelfieKey, remove, uploadUrl } from './storage.js';
+import { exists, getBytes, isOwnSelfieKey, istDay, MAX_SELFIE_BYTES, newSelfieKey, remove, uploadUrl } from './storage.js';
 
 export const app = new Hono<Env>();
 app.use(logger()); // method, path, status, ms. Never logs bodies or tokens.
@@ -25,7 +26,9 @@ app.get('/me', auth, async (c) => {
   return c.json({
     id: user.id, name: user.name, email: user.email, roles: c.get('identity').roles,
     sites: await placesOf(user.id), // offices / branches / home this person may check in from
-    consented_at: user.consented_at,
+    // The app shows the consent screen again when the text changed (v2 added face matching).
+    consented_at: user.consent_version >= CONSENT_VERSION ? user.consented_at : null,
+    consent_version: user.consent_version,
     created_at: user.created_at,
   });
 });
@@ -33,7 +36,7 @@ app.get('/me', auth, async (c) => {
 // DPDP: record (once) that the person agreed to selfie + location use.
 app.post('/consent', auth, async (c) => {
   const [row] = await sql`
-    update users set consented_at = coalesce(consented_at, now())
+    update users set consented_at = now(), consent_version = ${CONSENT_VERSION}
     where id = ${c.get('user').id} returning consented_at`;
   return c.json({ consented_at: row.consented_at });
 });
@@ -83,7 +86,9 @@ app.get('/attendance/day/:day', auth, async (c) => {
 /** Shared gate for every check-in step: consent, valid location, and allowed at one of the person's places. */
 async function gate(c: Context<Env>, body: unknown) {
   const user = c.get('user');
-  if (!user.consented_at) return { res: c.json({ error: 'no_consent', message: 'Please accept the consent screen first.' }, 403) };
+  if (!user.consented_at || user.consent_version < CONSENT_VERSION) {
+    return { res: c.json({ error: 'no_consent', message: 'Please accept the consent screen first.' }, 403) };
+  }
   const fix = parseFix(body);
   if (typeof fix === 'string') return { res: c.json({ error: 'invalid', message: fix }, 400) };
   const verdict = classify(fix, await placesOf(user.id));
@@ -146,14 +151,31 @@ app.post('/attendance', auth, async (c) => {
     return g.res;
   }
   const { fix, verdict } = g;
+
+  // Face: the selfie must show one clear face; if HR set a profile photo, compare with it.
+  // Face service down → the check-in still goes through (face_score stays empty), nothing is lost.
+  const face = await embedJpeg(await getBytes(photoKey)).catch(() => null);
+  if (face) {
+    const problem = faceProblem(face);
+    if (problem) {
+      await remove(photoKey).catch(() => undefined);
+      return c.json({ error: face.faces === 0 ? 'face_unclear' : 'face_multiple', message: problem }, 400);
+    }
+  }
+  const faceScore = face?.embedding && user.face_embedding ? cosine(face.embedding, user.face_embedding) : null;
+  const flags = [...verdict.flags];
+  if (faceScore !== null && faceScore < FACE_MATCH_THRESHOLD) flags.push('face_mismatch');
+  const status = flags.length ? 'flagged' : verdict.status;
+
   const [settings] = await sql<{ shift_start: string; grace_min: number }[]>`select shift_start::text, grace_min from settings where id = 1`;
   const late_min = minutesLate(new Date(), settings.shift_start, settings.grace_min);
   const address = await addressFor(fix.lat, fix.lng);
 
   const [row] = await sql`
-    insert into attendance (user_id, day, lat, lng, accuracy_m, mocked, site_id, distance_m, photo_key, status, flags, address, late_min)
+    insert into attendance (user_id, day, lat, lng, accuracy_m, mocked, site_id, distance_m, photo_key, status, flags, address, late_min, face_score)
     values (${user.id}, ${todayIst()}, ${fix.lat}, ${fix.lng}, ${fix.accuracy_m}, ${fix.mocked},
-            ${verdict.site.id}, ${verdict.distance_m}, ${photoKey}, ${verdict.status}, ${verdict.flags}, ${address}, ${late_min})
+            ${verdict.site.id}, ${verdict.distance_m}, ${photoKey}, ${status}, ${flags}, ${address}, ${late_min},
+            ${faceScore === null ? null : Math.round(faceScore * 1000) / 1000})
     on conflict (user_id, day) do nothing
     returning id`;
 

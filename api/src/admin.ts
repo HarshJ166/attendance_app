@@ -4,8 +4,9 @@ import { Auth0Error, addRole, createLogin, passwordLink, setBlocked, setName } f
 import { sql } from './db/index.js';
 import { adminOnly, ATTENDANCE_COLUMNS, auth, DAY, holidayOn, holidaysIn, MONTH, placesOf, withPhoto, type Env } from './http.js';
 import { csvRow, dayKind, FIXED_HOLIDAYS, monthDays, type Marked } from './rules.js';
+import { embedJpeg, FACE_MATCH_THRESHOLD, faceProblem } from './face.js';
 import { searchPlaces } from './places.js';
-import { istDay, viewUrl } from './storage.js';
+import { copy, exists, getBytes, isOwnProfileKey, istDay, MAX_SELFIE_BYTES, newProfileKey, remove, uploadUrl, viewUrl } from './storage.js';
 
 export const admin = new Hono<Env>();
 admin.use('*', auth, adminOnly);
@@ -119,7 +120,7 @@ admin.get('/attendance/:id', async (c) => {
   const id = idParam(c.req.param('id'));
   if (!id) return c.json(bad('bad id'), 400);
   const [row] = await sql`
-    select ${ATTENDANCE_COLUMNS}, u.name, u.email, u.employee_code, r.name as reviewed_by_name
+    select ${ATTENDANCE_COLUMNS}, u.name, u.email, u.employee_code, u.photo_key as profile_photo_key, r.name as reviewed_by_name
     from attendance a join users u on u.id = a.user_id
     left join sites s on s.id = a.site_id left join users r on r.id = a.reviewed_by
     where a.id = ${id}`;
@@ -129,7 +130,14 @@ admin.get('/attendance/:id', async (c) => {
     from checkin_attempts t left join sites s on s.id = t.site_id
     where t.user_id = ${row.user_id} and (t.at at time zone 'Asia/Kolkata')::date = ${row.day}
     order by t.at`;
-  return c.json({ attendance: await withPhoto(row), places: await placesOf(row.user_id), attempts });
+  const { profile_photo_key, ...rest } = row;
+  return c.json({
+    attendance: await withPhoto(rest),
+    profile_photo_url: profile_photo_key ? await viewUrl(profile_photo_key) : null,
+    face_threshold: FACE_MATCH_THRESHOLD,
+    places: await placesOf(row.user_id),
+    attempts,
+  });
 });
 
 // HR review: approve (counts present) or reject (counts absent, reason required). Who/when/why is stored.
@@ -222,13 +230,14 @@ admin.get('/export.csv', async (c) => {
 
 admin.get('/employees', async (c) => {
   const rows = await sql`
-    select u.id, u.name, u.email, u.employee_code, u.phone, u.designation, u.role, u.active, u.created_at,
+    select u.id, u.name, u.email, u.employee_code, u.phone, u.designation, u.role, u.active, u.created_at, u.photo_key,
       coalesce(json_agg(json_build_object('id', s.id, 'name', s.name, 'kind', s.kind) order by s.kind, s.name)
                filter (where s.id is not null), '[]') as places,
       (select max(a.marked_at) from attendance a where a.user_id = u.id and a.status <> 'rejected') as last_check_in
     from users u left join user_sites us on us.user_id = u.id left join sites s on s.id = us.site_id
     group by u.id order by u.active desc, u.name`;
-  return c.json({ employees: rows });
+  const employees = await Promise.all(rows.map(async ({ photo_key, ...e }) => ({ ...e, photo_url: photo_key ? await viewUrl(photo_key) : null })));
+  return c.json({ employees });
 });
 
 admin.get('/employees/:id', async (c) => {
@@ -236,15 +245,17 @@ admin.get('/employees/:id', async (c) => {
   const month = c.req.query('month') ?? istDay().slice(0, 7);
   if (!id || !MONTH.test(month)) return c.json(bad('bad id or month'), 400);
   const [u] = await sql`
-    select id, name, email, employee_code, phone, designation, role, active, created_at, consented_at
+    select id, name, email, employee_code, phone, designation, role, active, created_at, consented_at,
+      photo_key, photo_updated_at, face_embedding is not null as has_face
     from users where id = ${id}`;
   if (!u) return c.json({ error: 'not_found', message: 'No such employee.' }, 404);
   const mine = (await register(month)).find((p) => p.user.id === id);
   const attempts = await sql`
     select t.at, t.reason, t.distance_m, s.name as site_name from checkin_attempts t left join sites s on s.id = t.site_id
     where t.user_id = ${id} and t.at > now() - interval '30 days' order by t.at desc limit 50`;
+  const { photo_key, ...employee } = u;
   return c.json({
-    employee: u,
+    employee: { ...employee, photo_url: photo_key ? await viewUrl(photo_key) : null },
     places: await placesOf(id),
     month,
     days: mine?.days.map(({ record, ...d }) => ({ ...d, marked_at: record?.marked_at ?? null, site_name: record?.site_name ?? null, site_kind: record?.site_kind ?? null, distance_m: record?.distance_m ?? null })) ?? [],
@@ -313,6 +324,7 @@ admin.patch('/employees/:id', async (c) => {
   if (patch.role === 'admin' && u.role !== 'admin') await addRole(u.auth0_sub, 'admin');
 
   if (Object.keys(patch).length) await sql`update users set ${sql(patch)} where id = ${id}`;
+  if (patch.active === false) await clearPhoto(id); // DPDP: no face data kept for people who left
   if (b.site_ids !== undefined) {
     try { await setPlaces(id, b.site_ids); } catch (e) { return c.json(bad((e as Error).message), 400); }
   }
@@ -333,6 +345,68 @@ admin.post('/employees/bulk-places', async (c) => {
     ? await sql`insert into user_sites ${sql(ids.map((user_id) => ({ user_id, site_id: site.id })))} on conflict do nothing returning user_id`
     : await sql`delete from user_sites where site_id = ${site.id} and user_id in ${sql(ids)} returning user_id`;
   return c.json({ place: site.name, action: b.action, changed: changed.length });
+});
+
+// ---------- Employee photo (also the face reference) ----------
+
+async function clearPhoto(userId: number) {
+  const [old] = await sql`select photo_key from users where id = ${userId}`;
+  await sql`update users set photo_key = null, face_embedding = null, photo_updated_at = null where id = ${userId}`;
+  if (old?.photo_key) await remove(old.photo_key).catch(() => undefined);
+}
+
+// Step 1: a 5-minute upload link for a new photo (the browser resizes it to a small JPEG first).
+admin.post('/employees/:id/photo-upload-url', async (c) => {
+  const id = idParam(c.req.param('id'));
+  const bytes = (await body(c)).bytes;
+  if (!id || typeof bytes !== 'number' || !Number.isInteger(bytes) || bytes <= 0 || bytes > MAX_SELFIE_BYTES) return c.json(bad('Photo must be under 2 MB.'), 400);
+  const key = newProfileKey(id);
+  return c.json({ url: await uploadUrl(key, bytes), key });
+});
+
+// Step 2: use an uploaded photo ({key}) or one of their check-in selfies ({attendance_id}).
+// It must show exactly one clear face; its fingerprint becomes the face reference for check-ins.
+admin.post('/employees/:id/photo', async (c) => {
+  const id = idParam(c.req.param('id'));
+  const b = await body(c);
+  if (!id) return c.json(bad('bad id'), 400);
+  const [u] = await sql`select id, active from users where id = ${id}`;
+  if (!u) return c.json({ error: 'not_found', message: 'No such employee.' }, 404);
+  if (!u.active) return c.json(bad('Turn the person back on first.'), 400);
+
+  let key: string;
+  if (Number.isInteger(b.attendance_id)) {
+    const [a] = await sql`select photo_key from attendance where id = ${b.attendance_id as number} and user_id = ${id}`;
+    if (!a) return c.json({ error: 'not_found', message: 'That check-in isn’t theirs.' }, 404);
+    key = newProfileKey(id);
+    await copy(a.photo_key, key); // selfies are deleted after 90 days; the profile copy stays
+  } else if (isOwnProfileKey(b.key, id) && (await exists(b.key))) {
+    key = b.key;
+  } else {
+    return c.json(bad('Upload the photo first.'), 400);
+  }
+
+  const face = await embedJpeg(await getBytes(key));
+  if (!face) {
+    await remove(key).catch(() => undefined);
+    return c.json({ error: 'face_service_down', message: 'Face check is unavailable right now. Try again in a minute.' }, 503);
+  }
+  const problem = faceProblem(face);
+  if (problem || !face.embedding) {
+    await remove(key).catch(() => undefined);
+    return c.json({ error: 'face_unusable', message: face.faces === 0 ? 'No clear face found in this photo. Use a front-facing photo in good light.' : 'This photo has more than one face. Use a photo of just this person.' }, 400);
+  }
+  const [old] = await sql`select photo_key from users where id = ${id}`;
+  await sql`update users set photo_key = ${key}, face_embedding = ${face.embedding}, photo_updated_at = now() where id = ${id}`;
+  if (old?.photo_key && old.photo_key !== key) await remove(old.photo_key).catch(() => undefined);
+  return c.json({ photo_url: await viewUrl(key) });
+});
+
+admin.delete('/employees/:id/photo', async (c) => {
+  const id = idParam(c.req.param('id'));
+  if (!id) return c.json(bad('bad id'), 400);
+  await clearPhoto(id);
+  return c.json({ deleted: true });
 });
 
 admin.post('/employees/:id/password-link', async (c) => {
