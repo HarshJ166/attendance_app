@@ -3,7 +3,7 @@ import { useApi, type Place } from '../api';
 import { parseCsv } from '../csv';
 
 type Row = { line: number; name: string; email: string; employee_code: string; phone: string; designation: string; role: 'employee' | 'admin'; placeNames: string[]; siteIds: number[]; problems: string[] };
-type Result = { row: Row; ok: boolean; link?: string; error?: string };
+type Result = { row: Row; ok: boolean; link?: string; password?: string; error?: string };
 const MAX = 200;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -76,10 +76,10 @@ export function ImportEmployees({ sites, existing, onClose, onDone }: {
     const out: Result[] = [];
     for (const row of ready) {
       try {
-        const r = await api<{ set_password_link: string }>('/admin/employees', {
+        const r = await api<{ password: string | null; set_password_link: string | null }>('/admin/employees', {
           body: { name: row.name, email: row.email, employee_code: row.employee_code || null, phone: row.phone || null, designation: row.designation || null, role: row.role, site_ids: row.siteIds },
         });
-        out.push({ row, ok: true, link: r.set_password_link });
+        out.push({ row, ok: true, link: r.set_password_link ?? undefined, password: r.password ?? undefined });
       } catch (e) {
         out.push({ row, ok: false, error: (e as Error).message });
       }
@@ -112,7 +112,7 @@ export function ImportEmployees({ sites, existing, onClose, onDone }: {
               <button className="btn secondary" onClick={() => download('geomark-employees-template.csv', TEMPLATE)}>Download template</button>
             </div>
             {fileErr ? <div className="notice error">{fileErr}</div> : null}
-            <p className="small muted" style={{ margin: 0 }}>Nothing is created until you review the list and press “Create logins”. Each person gets a real GeoMark login and a set-password link to send them.</p>
+            <p className="small muted" style={{ margin: 0 }}>Nothing is created until you review the list and press “Create logins”. Each person gets a real GeoMark login with the company default password (they can change it in the app).</p>
           </div>
         ) : (
           <div style={{ display: 'grid', gap: 12 }}>
@@ -157,7 +157,9 @@ export function ImportEmployees({ sites, existing, onClose, onDone }: {
                 <div className="notice" style={{ background: 'var(--present-tint)', color: 'var(--present)' }}>
                   ✓ {created.length} {created.length === 1 ? 'login' : 'logins'} created{results.length - created.length ? `, ${results.length - created.length} failed (see the list)` : ''}.
                 </div>
-                {created.length ? (
+                {created.length && created[0].password ? (
+                  <p style={{ margin: 0 }}>Everyone logs in to the GeoMark app with their email and the company default password <b className="mono">{created[0].password}</b>. They can change it in the app: Profile → Change password.</p>
+                ) : created.length ? (
                   <div>
                     <button className="btn" onClick={() => download('geomark-set-password-links.csv',
                       ['name,email,set_password_link (valid 7 days)', ...created.map((r) => [r.row.name, r.row.email, r.link!].map(cell).join(','))].join('\r\n'))}>

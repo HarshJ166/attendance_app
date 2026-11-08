@@ -1,13 +1,26 @@
 import Constants from 'expo-constants';
+import { useState } from 'react';
 import { Linking, Pressable, ScrollView, View } from 'react-native';
-import { placeLabel, type Me } from '../api';
+import { api, placeLabel, type Me } from '../api';
 import { mapUrl } from '../geo';
 import { Button, Screen, T } from '../ui';
 import { color, font, space } from '../theme';
 
 const date = (iso: string) => new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
 
-export function Profile({ me, onLogout }: { me: Me; onLogout: () => void }) {
+export function Profile({ me, getToken, onLogout }: { me: Me; getToken: () => Promise<string>; onLogout: () => void }) {
+  const [pw, setPw] = useState<{ busy?: boolean; err?: string }>({});
+  // Only on tap: opens a 15-minute Auth0 page in the browser to choose a new password.
+  async function changePassword() {
+    setPw({ busy: true });
+    try {
+      const r = await api<{ url: string }>(await getToken(), '/me/password-link', {});
+      await Linking.openURL(r.url);
+      setPw({});
+    } catch {
+      setPw({ err: 'Could not open the password page. Check your internet and try again.' });
+    }
+  }
   const initials = me.name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase() || '?';
   const role = me.roles.includes('admin') ? 'Admin (HR)' : 'Employee';
   const rows: [string, string][] = [
@@ -65,6 +78,10 @@ export function Profile({ me, onLogout }: { me: Me; onLogout: () => void }) {
           </T>
         </View>
 
+        <View style={{ gap: space.xs }}>
+          <Button label="Change password" kind="secondary" busy={pw.busy} onPress={() => void changePassword()} />
+          {pw.err ? <T kind="small" style={{ color: color.danger }}>{pw.err}</T> : <T kind="small">Opens a secure page to choose a new password. Use it the next time you log in.</T>}
+        </View>
         <Button label="Log out" kind="secondary" onPress={onLogout} />
         <T kind="small" style={{ textAlign: 'center' }}>GeoMark {Constants.expoConfig?.version ?? ''}</T>
       </ScrollView>

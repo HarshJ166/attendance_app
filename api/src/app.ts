@@ -2,6 +2,7 @@ import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { admin } from './admin.js';
+import { passwordLink } from './auth0-admin.js';
 import { sql } from './db/index.js';
 import { addressFor } from './places.js';
 import { ATTENDANCE_COLUMNS, auth, CONSENT_VERSION, DAY, holidayOn, holidaysIn, MONTH, placesOf, todayIst, withPhoto, type Env } from './http.js';
@@ -31,6 +32,11 @@ app.get('/me', auth, async (c) => {
     consent_version: user.consent_version,
     created_at: user.created_at,
   });
+});
+
+// Profile → Change password: a short-lived Auth0 page where the person picks a new password (only on tap).
+app.post('/me/password-link', auth, async (c) => {
+  return c.json({ url: await passwordLink(c.get('user').auth0_sub, 15 * 60) });
 });
 
 // DPDP: record (once) that the person agreed to selfie + location use.

@@ -46,24 +46,33 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
 }
 
 /**
- * Creates the login with a random password nobody sees, gives it a role, and returns a one-time
- * "set your password" link (valid 7 days) for HR to send to the person.
+ * The company default password for new logins (env DEFAULT_USER_PASSWORD, never in git). People can change it
+ * later from the app (Profile → Change password). Unset → random password + one-time set-password link instead.
  */
+export const defaultPassword = () => process.env.DEFAULT_USER_PASSWORD?.trim() || null;
+
+/** Creates the login with a role. Returns the default password HR tells the person, or a set-password link. */
 export async function createLogin(email: string, name: string, role: keyof typeof ROLE_IDS) {
-  const password = `${randomBytes(18).toString('base64url')}Aa1!`;
+  const preset = defaultPassword();
+  const password = preset ?? `${randomBytes(18).toString('base64url')}Aa1!`;
   const user = await call<{ user_id: string }>('POST', '/users', {
     connection: CONNECTION, email, name, password, email_verified: true, verify_email: false,
   });
   await call('POST', `/roles/${ROLE_IDS[role]}/users`, { users: [user.user_id] });
+  if (preset) return { auth0_sub: user.user_id, password: preset, set_password_link: null };
   const ticket = await call<{ ticket: string }>('POST', '/tickets/password-change', {
     user_id: user.user_id, ttl_sec: 7 * 24 * 3600, mark_email_as_verified: true,
   });
-  return { auth0_sub: user.user_id, set_password_link: ticket.ticket };
+  return { auth0_sub: user.user_id, password: null, set_password_link: ticket.ticket };
 }
 
+/** HR: put an existing login back on the company default password (e.g. they forgot theirs). */
+export const resetToDefault = (auth0Sub: string, password: string) =>
+  call('PATCH', `/users/${encodeURIComponent(auth0Sub)}`, { password, connection: CONNECTION });
+
 /** New "set your password" link for an existing login (e.g. the first one expired). */
-export async function passwordLink(auth0Sub: string) {
-  const t = await call<{ ticket: string }>('POST', '/tickets/password-change', { user_id: auth0Sub, ttl_sec: 7 * 24 * 3600 });
+export async function passwordLink(auth0Sub: string, ttlSec = 7 * 24 * 3600) {
+  const t = await call<{ ticket: string }>('POST', '/tickets/password-change', { user_id: auth0Sub, ttl_sec: ttlSec });
   return t.ticket;
 }
 

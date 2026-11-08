@@ -88,7 +88,7 @@ await step('today board: Asha present (late), Ravi not yet, attempts counted', a
   assert.equal(asha.status, 'flagged'); assert.equal(asha.attendance.site_kind, 'home'); assert.ok(asha.attendance.thumb_url.includes('X-Amz-Signature'));
   const ravi = t.json.people.find((p: any) => p.user.id === e2);
   assert.ok(['not_yet', 'off'].includes(ravi.status), ravi.status);
-  assert.equal(t.json.summary.late, 1);
+  assert.equal(asha.attendance.late_min, 20); assert.ok(t.json.summary.late >= 1); // real late check-ins may exist today too
   // The branch is a copy of the real DB, so count only this test's people (real attempts may exist today).
   assert.equal(t.json.attempts.filter((x: any) => x.user_id === e2).length, 2);
   assert.ok(t.json.summary.blocked_attempts >= 2);

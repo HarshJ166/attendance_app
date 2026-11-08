@@ -169,6 +169,12 @@ export function EmployeeProfile({ id }: { id: number }) {
             try { const r = await api<{ set_password_link: string }>(`/admin/employees/${id}/password-link`, { body: {} }); setMsg({ link: r.set_password_link }); }
             catch (err) { setMsg({ err: (err as Error).message }); }
           }}>New set-password link</button>
+          <button className="btn secondary" disabled={busy} onClick={async () => {
+            if (!window.confirm(`Reset ${e.name}'s password to the company default? Their current password stops working.`)) return;
+            setMsg({});
+            try { const r = await api<{ password: string }>(`/admin/employees/${id}/reset-password`, { body: {} }); setMsg({ ok: `${e.name} can now log in with ${e.email} and the default password ${r.password}` }); }
+            catch (err) { setMsg({ err: (err as Error).message }); }
+          }}>Reset to default password</button>
           {e.role !== 'admin' ? (
             <button className="btn secondary" disabled={busy} onClick={() => window.confirm(`Give ${e.name} HR admin access to this panel?`) && void patch({ role: 'admin' }, `${e.name} is now an HR admin.`)}>Make HR admin</button>
           ) : null}

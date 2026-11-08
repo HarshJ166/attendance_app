@@ -146,7 +146,7 @@ function Main() {
         {tab === 'today' ? <Home me={me} attendance={today} holiday={holiday} onMark={() => setCapturing(true)} /> : null}
         {tab === 'calendar' ? <CalendarTab getToken={getToken} /> : null}
         {tab === 'stats' ? <Stats getToken={getToken} /> : null}
-        {tab === 'profile' ? <Profile me={me} onLogout={() => void logout()} /> : null}
+        {tab === 'profile' ? <Profile me={me} getToken={getToken} onLogout={() => void logout()} /> : null}
       </View>
       <TabBar active={tab} onChange={setTab} />
     </View>

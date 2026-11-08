@@ -1,6 +1,6 @@
 // HR (admin) API. Every route: valid Auth0 token + `admin` role in that token (see http.adminOnly).
 import { Hono } from 'hono';
-import { Auth0Error, addRole, createLogin, passwordLink, setBlocked, setName } from './auth0-admin.js';
+import { Auth0Error, addRole, createLogin, defaultPassword, passwordLink, resetToDefault, setBlocked, setName } from './auth0-admin.js';
 import { sql } from './db/index.js';
 import { adminOnly, ATTENDANCE_COLUMNS, auth, DAY, holidayOn, holidaysIn, MONTH, placesOf, withPhoto, type Env } from './http.js';
 import { csvRow, dayKind, FIXED_HOLIDAYS, monthDays, type Marked } from './rules.js';
@@ -293,8 +293,8 @@ admin.post('/employees', async (c) => {
     values (${login.auth0_sub}, ${email}, ${name}, ${role}, ${optText(b.employee_code, 40)}, ${optText(b.phone, 30)}, ${optText(b.designation, 80)})
     returning id, name, email, role`;
   if (b.site_ids !== undefined) await setPlaces(u.id, b.site_ids);
-  // The link is shown to HR once, to send to the person (WhatsApp/email). Valid 7 days.
-  return c.json({ employee: u, set_password_link: login.set_password_link }, 201);
+  // HR tells the person: log in with this email + the company default password (or sends the link, if no default).
+  return c.json({ employee: u, password: login.password, set_password_link: login.set_password_link }, 201);
 });
 
 admin.patch('/employees/:id', async (c) => {
@@ -414,6 +414,16 @@ admin.post('/employees/:id/password-link', async (c) => {
   const [u] = id ? await sql`select auth0_sub from users where id = ${id}` : [];
   if (!u) return c.json({ error: 'not_found', message: 'No such employee.' }, 404);
   return c.json({ set_password_link: await passwordLink(u.auth0_sub) });
+});
+
+admin.post('/employees/:id/reset-password', async (c) => {
+  const pw = defaultPassword();
+  if (!pw) return c.json(bad('No default password is set on the server (DEFAULT_USER_PASSWORD).'), 400);
+  const id = idParam(c.req.param('id'));
+  const [u] = id ? await sql`select auth0_sub from users where id = ${id}` : [];
+  if (!u) return c.json({ error: 'not_found', message: 'No such employee.' }, 404);
+  await resetToDefault(u.auth0_sub, pw);
+  return c.json({ password: pw });
 });
 
 // ---------- Places (offices, branches, homes) ----------

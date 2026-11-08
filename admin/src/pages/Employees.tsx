@@ -156,7 +156,7 @@ function AddEmployee({ onClose, onAdded }: { onClose: () => void; onAdded: () =>
   const [placeIds, setPlaceIds] = useState<number[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [done, setDone] = useState<{ name: string; link: string; id: number } | null>(null);
+  const [done, setDone] = useState<{ name: string; email: string; password: string | null; link: string | null; id: number } | null>(null);
   const [copied, setCopied] = useState(false);
   const offices = (sites.data?.sites ?? []).filter((s) => s.kind === 'office');
 
@@ -171,10 +171,10 @@ function AddEmployee({ onClose, onAdded }: { onClose: () => void; onAdded: () =>
     setBusy(true);
     setErr(null);
     try {
-      const r = await api<{ employee: { id: number; name: string }; set_password_link: string }>('/admin/employees', {
+      const r = await api<{ employee: { id: number; name: string; email: string }; password: string | null; set_password_link: string | null }>('/admin/employees', {
         body: { ...f, site_ids: placeIds },
       });
-      setDone({ name: r.employee.name, link: r.set_password_link, id: r.employee.id });
+      setDone({ name: r.employee.name, email: r.employee.email, password: r.password, link: r.set_password_link, id: r.employee.id });
       onAdded();
     } catch (e2) {
       setErr((e2 as Error).message);
@@ -193,13 +193,26 @@ function AddEmployee({ onClose, onAdded }: { onClose: () => void; onAdded: () =>
         {done ? (
           <div style={{ display: 'grid', gap: 16 }}>
             <div className="notice" style={{ background: 'var(--present-tint)', color: 'var(--present)' }}>✓ {done.name} can now be set up.</div>
-            <p style={{ margin: 0 }}>Send this <b>one-time link</b> to {done.name} (WhatsApp or email). They open it, choose a password, then log in to the GeoMark app with their email. The link works for 7 days.</p>
-            <textarea className="input mono" readOnly value={done.link} rows={4} onFocus={(e) => e.currentTarget.select()} aria-label="Set-password link" />
+            {done.password ? (
+              <>
+                <p style={{ margin: 0 }}>Tell {done.name} to install the GeoMark app and log in with:</p>
+                <div className="card mono" style={{ display: 'grid', gap: 4 }}>
+                  <span>Email: {done.email}</span>
+                  <span>Password: {done.password}</span>
+                </div>
+                <p className="small muted" style={{ margin: 0 }}>This is the company default password. They can change it any time in the app: Profile → Change password.</p>
+              </>
+            ) : (
+              <>
+                <p style={{ margin: 0 }}>Send this <b>one-time link</b> to {done.name} (WhatsApp or email). They open it, choose a password, then log in to the GeoMark app with their email. The link works for 7 days.</p>
+                <textarea className="input mono" readOnly value={done.link ?? ''} rows={4} onFocus={(e) => e.currentTarget.select()} aria-label="Set-password link" />
+              </>
+            )}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button className="btn" onClick={() => { void navigator.clipboard.writeText(done.link); setCopied(true); }}>{copied ? 'Copied' : 'Copy link'}</button>
+              <button className="btn" onClick={() => { void navigator.clipboard.writeText(done.password ? `GeoMark login\nEmail: ${done.email}\nPassword: ${done.password}` : done.link ?? ''); setCopied(true); }}>{copied ? 'Copied' : done.password ? 'Copy login details' : 'Copy link'}</button>
               <a className="btn secondary" href={`#/employees/${done.id}`} onClick={onClose}>Open profile</a>
             </div>
-            <p className="small muted" style={{ margin: 0 }}>This link isn’t shown again. If it’s lost or expires, make a new one from their profile.</p>
+            {done.link ? <p className="small muted" style={{ margin: 0 }}>This link isn’t shown again. If it’s lost or expires, make a new one from their profile.</p> : null}
           </div>
         ) : (
           <form onSubmit={submit} style={{ display: 'grid', gap: 14 }}>
