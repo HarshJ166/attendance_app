@@ -117,7 +117,7 @@ test('verifyToken: accepts a valid token, rejects wrong audience / issuer / expi
 });
 
 test('shortAddress keeps road/area/suburb, drops wards, zones, state, PIN, country', async () => {
-  const { shortAddress } = await import('./geocode.js');
+  const { shortAddress } = await import('./places.js');
   assert.equal(
     shortAddress('Link Road, Renuka Nagar, Kandivali West, R/S Ward, Mumbai Zone 4, Mumbai Suburban District, Mumbai, Maharashtra, 400067, India'),
     'Link Road, Renuka Nagar, Kandivali West',
@@ -154,4 +154,32 @@ test('holidays: nobody absent, check-in still present, upcoming shows as holiday
   const days = monthDays('2026-11', '2026-11-30', '2026-01-01', new Map(), new Map([['2026-11-09', 'Diwali']]));
   assert.deepEqual([days[8].kind, days[8].holiday], ['holiday', 'Diwali']);
   assert.equal(days[9].holiday, null);
+});
+
+test('parseCoordinates: plain pairs, N/E, and every common Google Maps URL shape', async () => {
+  const { parseCoordinates, isGoogleMapsLink } = await import('./places.js');
+  const want = { lat: 19.2066, lng: 72.8357 };
+  assert.deepEqual(parseCoordinates('19.2066, 72.8357'), want);
+  assert.deepEqual(parseCoordinates('19.2066,72.8357'), want);
+  assert.deepEqual(parseCoordinates('19.2066° N, 72.8357° E'), want);
+  assert.deepEqual(parseCoordinates('https://www.google.com/maps/place/Dahanukarwadi/@19.2066,72.8357,17z/data=x'), want);
+  assert.deepEqual(parseCoordinates('https://www.google.com/maps?q=19.2066,72.8357'), want);
+  assert.deepEqual(parseCoordinates('https://maps.google.com/?ll=19.2066,72.8357&z=16'), want);
+  assert.deepEqual(parseCoordinates('https://www.google.com/maps/place/X/@19.20,72.83,15z/data=!3m1!4b1!4m6!3m5!1s0x0:0x0!8m2!3d19.2066!4d72.8357'), want); // pin beats view centre
+  assert.equal(parseCoordinates('Dahanukarwadi, Kandivali West'), null);
+  assert.equal(parseCoordinates('0, 0'), null);
+  assert.equal(parseCoordinates('123.4, 72.8'), null);
+  assert.ok(isGoogleMapsLink('https://maps.app.goo.gl/AbCdEf123'));
+  assert.ok(isGoogleMapsLink('https://www.google.com/maps/place/x'));
+  assert.ok(!isGoogleMapsLink('https://evil.example/maps?q=1,2'));
+  assert.ok(!isGoogleMapsLink('http://maps.app.goo.gl/x')); // https only
+});
+
+test('mapplsShortAddress keeps the useful parts and the PIN', async () => {
+  const { mapplsShortAddress } = await import('./places.js');
+  assert.equal(
+    mapplsShortAddress({ houseName: 'Shanti Complex', street: 'Unnamed Road', subLocality: 'Renuka Nagar', locality: 'Kandivali West', city: 'Mumbai', pincode: '400067' }),
+    'Shanti Complex, Renuka Nagar, Kandivali West, Mumbai 400067',
+  );
+  assert.equal(mapplsShortAddress({ formatted_address: 'Fallback Road, Mumbai' }), 'Fallback Road, Mumbai');
 });

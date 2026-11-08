@@ -18,7 +18,7 @@ export function PlacePicker({ value, onChange }: { value: Pin | null; onChange: 
   });
   const api = useApi();
   const [q, setQ] = useState('');
-  const [results, setResults] = useState<{ label: string; lat: number; lng: number }[] | null>(null);
+  const [results, setResults] = useState<{ label: string; lat: number; lng: number; source?: string }[] | null>(null);
   const [searchMsg, setSearchMsg] = useState<string | null>(null);
 
   // Create the map once.
@@ -65,10 +65,16 @@ export function PlacePicker({ value, onChange }: { value: Pin | null; onChange: 
   async function search() {
     if (!q.trim()) return;
     setSearchMsg(null);
-    const r = await api<{ results: { label: string; lat: number; lng: number }[]; message?: string }>(`/admin/geocode?q=${encodeURIComponent(q)}`).catch(() => ({ results: [], message: 'Search failed. Click on the map instead.' }));
+    const r = await api<{ results: { label: string; lat: number; lng: number; source: string }[]; message?: string }>(`/admin/geocode?q=${encodeURIComponent(q)}`).catch(() => ({ results: [], message: 'Search failed. Paste coordinates or click on the map instead.' }));
+    // A pasted pin (coordinates / Google link) is exact: jump straight to it.
+    if (r.results.length === 1 && (r.results[0].source === 'coordinates' || r.results[0].source === 'google')) {
+      choose(r.results[0]);
+      setSearchMsg(`Pin placed from ${r.results[0].source === 'google' ? 'the Google Maps link' : 'the coordinates'}.`);
+      return;
+    }
     setResults(r.results);
     if (r.message) setSearchMsg(r.message);
-    else if (!r.results.length) setSearchMsg('No match. Try a landmark or area name, or click on the map.');
+    else if (!r.results.length) setSearchMsg('No match. Paste coordinates or a Google Maps link, or click on the map.');
   }
 
   function choose(r: { lat: number; lng: number }) {
@@ -83,18 +89,19 @@ export function PlacePicker({ value, onChange }: { value: Pin | null; onChange: 
         <input
           className="input" style={{ flex: 1 }} value={q} onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void search(); } }}
-          placeholder="Search address, e.g. Dahanukarwadi, Kandivali West" aria-label="Search address"
+          placeholder="Address, coordinates (19.2066, 72.8357) or a Google Maps link" aria-label="Search address, or paste coordinates or a Google Maps link"
         />
         <button className="btn secondary" type="button" onClick={() => void search()} disabled={!q.trim()}>Search</button>
       </div>
       {results && results.length ? (
         <ul className="picker-results">
           {results.map((r) => (
-            <li key={`${r.lat},${r.lng}`}><button type="button" onClick={() => choose(r)}>{r.label}</button></li>
+            <li key={`${r.lat},${r.lng}`}><button type="button" onClick={() => choose(r)}>{r.label} <span className="muted small">· {r.source === 'mappls' ? 'Mappls' : r.source === 'osm' ? 'OpenStreetMap' : 'pin'}</span></button></li>
           ))}
         </ul>
       ) : null}
       {searchMsg ? <div className="small muted">{searchMsg}</div> : null}
+      <div className="small muted">Tip: in Google Maps, long-press the entrance, copy the numbers or use Share → Copy link, and paste here.</div>
       <div ref={el} className="map" style={{ height: 340, cursor: 'crosshair' }} aria-label="Map: click to place the pin, drag it to adjust" />
       <div className="small muted">{value ? `Pin at ${value.lat.toFixed(5)}, ${value.lng.toFixed(5)}. Drag it to adjust.` : 'Click on the map to drop the pin.'}</div>
       <label className="field">

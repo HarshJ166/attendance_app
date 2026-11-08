@@ -20,6 +20,8 @@ QA_HOST=$(printf '%s' "$URL" | sed -E 's|.*@([^/]+)/.*|\1|')
 
 cd "$ROOT/api"
 export NODE_ENV=test ITEST_OK=1 DATABASE_URL="$URL"
+# Real Auth0 user creation must never happen in QA: blank the service app (env beats --env-file).
+export AUTH0_MGMT_CLIENT_ID= AUTH0_MGMT_CLIENT_SECRET=
 npx tsx --env-file=.env src/db/migrate.ts >/dev/null
 # Start from an empty copy (the branch inherits main's rows).
 node --input-type=module -e 'import postgres from "postgres"; const s=postgres(process.env.DATABASE_URL,{onnotice(){}}); await s`truncate checkin_attempts, attendance, user_sites, users, sites restart identity cascade`; await s.end()'

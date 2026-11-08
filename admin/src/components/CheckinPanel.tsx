@@ -6,7 +6,9 @@ import { StatusChip } from './StatusChip';
 const FLAG: Record<string, string> = { low_accuracy: 'Weak GPS signal' };
 
 /** Side panel: selfie with geo-stamp, facts, map with all their places, blocked attempts, HR review. */
-export function CheckinPanel({ id, onClose, onReviewed }: { id: number; onClose: () => void; onReviewed: () => void }) {
+type Nav = { label: string; prev: (() => void) | null; next: (() => void) | null };
+
+export function CheckinPanel({ id, onClose, onReviewed, nav }: { id: number; onClose: () => void; onReviewed: () => void; nav?: Nav }) {
   const { data, error, loading, reload } = useLoad<CheckinDetail>(`/admin/attendance/${id}`);
   const api = useApi();
   const [note, setNote] = useState('');
@@ -16,10 +18,18 @@ export function CheckinPanel({ id, onClose, onReviewed }: { id: number; onClose:
 
   useEffect(() => {
     panel.current?.focus();
-    const esc = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', esc);
-    return () => window.removeEventListener('keydown', esc);
-  }, [onClose]);
+  }, [id]);
+  useEffect(() => {
+    const keys = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') return onClose();
+      const typing = e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement;
+      if (typing) return; // arrows move the caret while writing a note
+      if (e.key === 'ArrowLeft' && nav?.prev) { e.preventDefault(); nav.prev(); }
+      if (e.key === 'ArrowRight' && nav?.next) { e.preventDefault(); nav.next(); }
+    };
+    window.addEventListener('keydown', keys);
+    return () => window.removeEventListener('keydown', keys);
+  }, [onClose, nav]);
 
   async function decide(decision: 'approve' | 'reject') {
     setBusy(decision);
@@ -49,6 +59,13 @@ export function CheckinPanel({ id, onClose, onReviewed }: { id: number; onClose:
           </div>
           <button className="btn secondary small" onClick={onClose} aria-label="Close details">Close</button>
         </div>
+        {nav ? (
+          <div className="panel-nav">
+            <button className="btn secondary small" onClick={() => nav.prev?.()} disabled={!nav.prev} aria-label="Previous check-in">‹ Previous</button>
+            <span className="small muted num">{nav.label}<span className="hide-narrow"> · use ← → keys</span></span>
+            <button className="btn secondary small" onClick={() => nav.next?.()} disabled={!nav.next} aria-label="Next check-in">Next ›</button>
+          </div>
+        ) : null}
 
         {loading ? <div className="muted">Loading…</div> : null}
         {error ? <div className="notice error">{error.message}</div> : null}

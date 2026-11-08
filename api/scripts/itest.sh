@@ -8,5 +8,6 @@ N branches create --project-id $P --name itest >/dev/null
 trap 'N branches delete itest --project-id $P >/dev/null 2>&1 && echo "test branch deleted"' EXIT
 URL=$(N connection-string itest --project-id $P --pooled | tr -d '\n')
 export NODE_ENV=test DATABASE_URL="$URL" ITEST_OK=1
+export AUTH0_MGMT_CLIENT_ID= AUTH0_MGMT_CLIENT_SECRET=  # never create real Auth0 users from tests
 npx tsx --env-file=.env src/db/migrate.ts
 npx tsx --env-file=.env scripts/admin-itest.ts 2>&1 | grep -vE '^(<--|-->)'

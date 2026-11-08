@@ -68,8 +68,35 @@ await step('Dashboard', async () => {
   await page.getByRole('cell', { name: /Asha Patil/ }).waitFor();
   await noCrash(); await shot('1-dashboard');
 });
+await step('Dashboard tiles filter + search', async () => {
+  await page.getByRole('button', { name: /HR check/ }).first().click();
+  await page.getByRole('cell', { name: /Meena Iyer/ }).waitFor();
+  if (await page.getByRole('cell', { name: /Asha Patil/ }).count()) throw new Error('HR check tile did not filter');
+  await page.getByRole('button', { name: /HR check/ }).first().click(); // toggle back
+  await page.getByLabel('Search check-ins').fill('ravi');
+  await page.getByRole('cell', { name: /Ravi Shah/ }).waitFor();
+  if (await page.getByRole('cell', { name: /Asha Patil/ }).count()) throw new Error('search did not filter');
+  await page.getByLabel('Search check-ins').fill('');
+  await noCrash(); await shot('1b-dashboard-tiles');
+});
+await step('Dashboard → View panel steps with Next / ← → keys', async () => {
+  await page.getByRole('row', { name: /Asha Patil/ }).getByRole('button', { name: 'View' }).click();
+  await page.getByRole('dialog', { name: 'Check-in details' }).waitFor();
+  const first = await page.getByRole('dialog').getByRole('heading', { level: 2 }).textContent();
+  await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(800);
+  const second = await page.getByRole('dialog').getByRole('heading', { level: 2 }).textContent();
+  if (first === second) throw new Error(`ArrowRight did not move (${first})`);
+  await page.getByRole('button', { name: 'Previous check-in' }).click();
+  await page.getByRole('dialog').getByRole('heading', { name: first }).waitFor();
+  await page.getByRole('button', { name: 'Close details' }).click();
+});
+await step('Dashboard → one-click Approve on an HR-check row', async () => {
+  await page.getByRole('row', { name: /Meena Iyer/ }).getByRole('button', { name: 'Approve' }).click();
+  await page.getByRole('row', { name: /Meena Iyer/ }).getByText('Present').waitFor();
+});
 await step('Dashboard → View panel with map', async () => {
-  await page.getByRole('row', { name: /Meena Iyer/ }).getByRole('button', { name: 'View' }).click();
+  await page.getByRole('row', { name: /Ravi Shah/ }).getByRole('button', { name: 'View' }).click();
   await page.getByRole('dialog', { name: 'Check-in details' }).waitFor();
   await page.locator('.leaflet-container').first().waitFor();
   await noCrash(); await shot('2-view-panel');
@@ -78,7 +105,7 @@ await step('Dashboard → View panel with map', async () => {
 await step('Review', async () => {
   await page.getByRole('link', { name: /Review/ }).click();
   await page.getByRole('heading', { name: 'Review' }).waitFor();
-  await page.getByText('Meena Iyer').waitFor();
+  await page.getByText(/Nothing to review|Meena Iyer/).first().waitFor(); // Meena was approved above
   await noCrash(); await shot('3-review');
 });
 await step('Employees', async () => {
@@ -86,6 +113,28 @@ await step('Employees', async () => {
   await page.getByRole('heading', { name: 'Employees' }).waitFor();
   await page.getByText('Imran Khan').waitFor();
   await noCrash(); await shot('4-employees');
+});
+await step('Employees → filter, select two, bulk-add a place', async () => {
+  await page.getByLabel('Filter by designation').selectOption('Field sales');
+  await page.getByRole('link', { name: 'Imran Khan' }).waitFor();
+  if (await page.getByRole('link', { name: 'Ravi Shah' }).count()) throw new Error('designation filter did not filter');
+  await page.getByLabel('Select everyone shown').check();
+  await page.getByLabel('Place for selected people').selectOption({ label: 'Andheri branch' });
+  await page.getByRole('button', { name: 'Add place' }).click();
+  await page.getByText(/Andheri branch added for 2 people/).waitFor();
+  await page.getByLabel('Filter by designation').selectOption('');
+  await noCrash(); await shot('4b-employees-bulk');
+});
+await step('Employees → CSV import preview (never creates logins in QA)', async () => {
+  await page.getByRole('button', { name: /Import CSV/ }).click();
+  await page.getByRole('dialog', { name: 'Import employees' }).waitFor();
+  const csv = 'name,email,designation,places\n"Patil, Kiran",kiran@qa.local,Driver,"Dahanukarwadi, Kandivali (W)"\nNo Email,,Driver,\nAsha Again,asha@qa.local,,\nPooja,pooja@qa.local,,Mars office\n';
+  await page.locator('input[type=file]').setInputFiles({ name: 'people.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
+  await page.getByText(/4.*rows.*1.*ready.*3.*with problems/).waitFor();
+  await page.getByText('already an employee').waitFor();
+  await page.getByText(/unknown place: Mars office/).waitFor();
+  await noCrash(); await shot('5b-import-preview');
+  await page.getByRole('button', { name: 'Close' }).click();
 });
 await step('Employees → Add employee panel', async () => {
   await page.getByRole('button', { name: 'Add employee' }).click();
@@ -111,10 +160,14 @@ await step('Places', async () => {
   await page.locator('.leaflet-container').first().waitFor();
   await noCrash(); await shot('7-places');
 });
-await step('Places → Edit place (map picker)', async () => {
+await step('Places → Edit place (map picker) + paste coordinates', async () => {
   await page.getByRole('row', { name: /Andheri branch/ }).getByRole('button', { name: 'Edit' }).click();
   await page.getByRole('dialog', { name: 'Edit place' }).waitFor();
   await page.locator('.pick-pin').waitFor();
+  await page.getByLabel(/Search address/).fill('19.1200, 72.8470');
+  await page.getByLabel(/Search address/).press('Enter');
+  await page.getByText('Pin placed from the coordinates.').waitFor();
+  await page.getByText('Pin at 19.12000, 72.84700').waitFor();
   await noCrash(); await shot('8-edit-place');
   await page.getByRole('button', { name: 'Close' }).click();
 });

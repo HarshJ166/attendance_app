@@ -2,6 +2,7 @@ import { useAuth0 } from '@auth0/auth0-react';
 import { useEffect, useState } from 'react';
 import { useLoad } from './api';
 import { PageGuard } from './components/PageGuard';
+import { Icon } from './components/Icon';
 import { Dashboard } from './pages/Dashboard';
 import { EmployeeProfile } from './pages/EmployeeProfile';
 import { Employees } from './pages/Employees';
@@ -17,14 +18,18 @@ function pageFromHash(): Page {
   if (a === 'review' || a === 'employees' || a === 'places' || a === 'register' || a === 'settings') return { name: a };
   return { name: 'dashboard' };
 }
-const NAV: { hash: string; label: string; match: Page['name'][] }[] = [
-  { hash: '#/', label: 'Dashboard', match: ['dashboard'] },
-  { hash: '#/review', label: 'Review', match: ['review'] },
-  { hash: '#/employees', label: 'Employees', match: ['employees', 'employee'] },
-  { hash: '#/places', label: 'Places', match: ['places'] },
-  { hash: '#/register', label: 'Register', match: ['register'] },
-  { hash: '#/settings', label: 'Settings', match: ['settings'] },
+const NAV: { hash: string; label: string; icon: string; match: Page['name'][] }[] = [
+  { hash: '#/', label: 'Dashboard', icon: 'dashboard', match: ['dashboard'] },
+  { hash: '#/review', label: 'Review', icon: 'review', match: ['review'] },
+  { hash: '#/employees', label: 'Employees', icon: 'employees', match: ['employees', 'employee'] },
+  { hash: '#/places', label: 'Places', icon: 'places', match: ['places'] },
+  { hash: '#/register', label: 'Register', icon: 'register', match: ['register'] },
+  { hash: '#/settings', label: 'Settings', icon: 'settings', match: ['settings'] },
 ];
+
+// Remembered per browser; storage can be blocked (private mode), so never let it break the panel.
+const readCollapsed = () => { try { return localStorage.getItem('geomark.nav') === 'collapsed'; } catch { return false; } };
+const saveCollapsed = (v: boolean) => { try { localStorage.setItem('geomark.nav', v ? 'collapsed' : 'open'); } catch { /* ignore */ } };
 
 export default function App() {
   const { isLoading, isAuthenticated, loginWithRedirect, logout, user, error } = useAuth0();
@@ -52,6 +57,7 @@ function Shell({ name, onLogout }: { name: string; onLogout: () => void }) {
     window.addEventListener('hashchange', on);
     return () => window.removeEventListener('hashchange', on);
   }, []);
+  const [collapsed, setCollapsed] = useState(readCollapsed);
   // One light request decides whether this person is HR, and feeds the review badge.
   const review = useLoad<{ items: unknown[] }>('/admin/review');
 
@@ -69,18 +75,28 @@ function Shell({ name, onLogout }: { name: string; onLogout: () => void }) {
 
   const pending = review.data?.items.length ?? 0;
   return (
-    <div className="shell">
+    <div className={`shell ${collapsed ? 'collapsed' : ''}`}>
       <nav className="nav" aria-label="Main">
-        <div className="brand">GeoMark <span>HR panel</span></div>
+        <div className="brand">
+          <span className="brand-full">GeoMark <span>HR panel</span></span>
+          <span className="brand-mark" aria-hidden="true">G</span>
+        </div>
         {NAV.map((n) => (
-          <a key={n.hash} href={n.hash} aria-current={n.match.includes(page.name) ? 'page' : undefined}>
-            {n.label}
+          <a key={n.hash} href={n.hash} aria-current={n.match.includes(page.name) ? 'page' : undefined} title={collapsed ? n.label : undefined} aria-label={n.label}>
+            <Icon name={n.icon} />
+            <span className="nav-label">{n.label}</span>
             {n.label === 'Review' && pending ? <span className="count num" aria-label={`${pending} waiting`}>{pending}</span> : null}
           </a>
         ))}
         <div className="nav-foot">
-          <span>{name}</span>
-          <button className="btn secondary small" onClick={onLogout}>Log out</button>
+          <span className="nav-label who-am-i">{name}</span>
+          <button className="btn secondary small" onClick={onLogout} title="Log out" aria-label="Log out">
+            <Icon name="logout" size={18} /><span className="nav-label">Log out</span>
+          </button>
+          <button className="btn secondary small nav-toggle" onClick={() => { setCollapsed(!collapsed); saveCollapsed(!collapsed); }}
+            aria-label={collapsed ? 'Expand menu' : 'Collapse menu'} title={collapsed ? 'Expand menu' : 'Collapse menu'}>
+            <Icon name={collapsed ? 'expand' : 'collapse'} size={18} /><span className="nav-label">Collapse</span>
+          </button>
         </div>
       </nav>
       <main>

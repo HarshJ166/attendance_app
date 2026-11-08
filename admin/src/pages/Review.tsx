@@ -40,7 +40,14 @@ export function Review({ onReviewed }: { onReviewed: () => void }) {
           </table>
         </div>
       ) : null}
-      {open != null ? <CheckinPanel id={open} onClose={() => setOpen(null)} onReviewed={() => { reload(); onReviewed(); }} /> : null}
+      {open != null ? (() => {
+        const ids = data?.items.map((x) => x.id) ?? [];
+        const pos = ids.indexOf(open);
+        return (
+          <CheckinPanel id={open} onClose={() => setOpen(null)} onReviewed={() => { reload(); onReviewed(); }}
+            nav={{ label: pos >= 0 ? `${pos + 1} of ${ids.length}` : 'Reviewed', prev: pos > 0 ? () => setOpen(ids[pos - 1]) : null, next: pos >= 0 && pos < ids.length - 1 ? () => setOpen(ids[pos + 1]) : null }} />
+        );
+      })() : null}
     </div>
   );
 }

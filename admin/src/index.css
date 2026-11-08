@@ -184,3 +184,57 @@ button.cal-day:hover { outline: 2px solid var(--ink); }
 .cal-day .hname { font-size: 12px; color: var(--muted); line-height: 1.2; }
 .reg-cell.holiday > span { color: var(--muted); background: var(--muted-tint); }
 .register th.hol { color: var(--muted); background: var(--muted-tint); }
+
+/* ---------- sidebar: icons + collapse (auto-collapses below 1180px) ---------- */
+.nav a { gap: 12px; }
+.brand { display: flex; align-items: center; }
+.brand-mark { display: none; width: 36px; height: 36px; border-radius: 10px; background: var(--present); color: #fff; font: 700 20px var(--display); place-items: center; }
+.nav-foot .btn { justify-content: flex-start; gap: 8px; }
+.shell { transition: grid-template-columns 160ms ease; }
+.shell.collapsed { grid-template-columns: 76px 1fr; }
+.shell.collapsed .nav { padding: 24px 12px; align-items: center; }
+.shell.collapsed .nav-label, .shell.collapsed .brand-full { display: none; }
+.shell.collapsed .brand { padding: 0 0 20px; }
+.shell.collapsed .brand-mark { display: grid; }
+.shell.collapsed .nav a { width: 48px; justify-content: center; padding: 0; position: relative; }
+.shell.collapsed .nav .count { position: absolute; top: 2px; right: 0; margin: 0; padding: 0 6px; }
+.shell.collapsed .nav-foot { padding: 12px 0; align-items: center; }
+.shell.collapsed .nav-foot .btn { width: 48px; justify-content: center; padding: 0; }
+@media (max-width: 1180px) and (min-width: 861px) {
+  .shell { grid-template-columns: 76px 1fr; }
+  .nav { padding: 24px 12px; align-items: center; }
+  .nav-label, .brand-full { display: none; }
+  .brand { padding: 0 0 20px; } .brand-mark { display: grid; }
+  .nav a { width: 48px; justify-content: center; padding: 0; position: relative; }
+  .nav .count { position: absolute; top: 2px; right: 0; margin: 0; padding: 0 6px; }
+  .nav-foot { padding: 12px 0; align-items: center; } .nav-foot .btn { width: 48px; justify-content: center; padding: 0; }
+  .nav-toggle { display: none !important; }
+}
+@media (max-width: 860px) { .nav-toggle, .brand-mark { display: none !important; } .shell.collapsed { grid-template-columns: 1fr; } }
+
+/* ---------- sticky table headers ---------- */
+.table-wrap { max-height: calc(100vh - 160px); }
+.list thead th { position: sticky; top: 0; background: var(--surface); z-index: 2; box-shadow: inset 0 -1px 0 var(--line); }
+.register thead th.sticky { z-index: 3; }
+
+/* ---------- dashboard tiles, search, row actions ---------- */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.tile { display: grid; gap: 8px; align-content: start; text-align: left; background: var(--surface); border: 1.5px solid var(--line); border-radius: var(--radius); padding: 14px 16px; cursor: pointer; font: inherit; color: var(--ink); text-decoration: none; }
+.tile:hover { border-color: var(--muted); }
+.tile[aria-pressed='true'] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.tile-value { font: 600 34px/1 var(--body); }
+.tile-value small { font-size: 15px; font-weight: 400; color: var(--muted); }
+.tile.quiet .tile-value { color: var(--muted); }
+.search { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--muted); min-width: 280px; }
+.search:focus-within { border-color: var(--present); }
+.search input { border: 0; outline: none; flex: 1; font-size: 16px; color: var(--ink); background: transparent; min-height: 40px; }
+.row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.link-btn { background: none; border: 0; padding: 0; color: var(--present); text-decoration: underline; cursor: pointer; font: inherit; }
+.trend-card summary { cursor: pointer; list-style-position: outside; }
+.panel-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: -8px; }
+@media (max-width: 860px) { .search { min-width: 0; width: 100%; } .hide-narrow { display: none; } }
+
+.filter-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.filter-bar select.input { min-width: 150px; }
+.bulk-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: var(--present-tint); border-radius: var(--radius); padding: 10px 14px; position: sticky; top: 8px; z-index: 5; }
+.bulk-bar select.input { min-height: 36px; }

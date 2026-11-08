@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { placeLabel, time, useApi, useLoad, type Place } from '../api';
+import { Icon } from '../components/Icon';
+import { ImportEmployees } from '../components/ImportEmployees';
 
 type Emp = {
   id: number; name: string; email: string | null; employee_code: string | null; phone: string | null; designation: string | null;
@@ -8,36 +10,118 @@ type Emp = {
 
 export function Employees() {
   const { data, error, loading, reload } = useLoad<{ employees: Emp[] }>('/admin/employees');
+  const sites = useLoad<{ sites: Place[] }>('/admin/sites');
+  const api = useApi();
   const [adding, setAdding] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [q, setQ] = useState('');
-  const [showLeft, setShowLeft] = useState(false);
-  const list = (data?.employees ?? []).filter((e) =>
-    (showLeft || e.active) && [e.name, e.email, e.employee_code, e.designation].some((v) => v?.toLowerCase().includes(q.trim().toLowerCase())));
+  const [place, setPlace] = useState('');
+  const [desig, setDesig] = useState('');
+  const [access, setAccess] = useState('');
+  const [status, setStatus] = useState('active');
+  const [picked, setPicked] = useState<Set<number>>(new Set());
+  const [bulkPlace, setBulkPlace] = useState('');
+  const [bulkMsg, setBulkMsg] = useState<{ ok?: string; err?: string }>({});
+  const all = data?.employees ?? [];
+  const designations = [...new Set(all.map((e) => e.designation).filter(Boolean) as string[])].sort();
+  const needle = q.trim().toLowerCase();
+  const list = all.filter((e) =>
+    (status === '' || (status === 'active') === e.active) &&
+    (!place || (place === 'none' ? e.places.length === 0 : e.places.some((p) => String(p.id) === place))) &&
+    (!desig || e.designation === desig) &&
+    (!access || e.role === access) &&
+    (!needle || [e.name, e.email, e.employee_code, e.designation].some((v) => v?.toLowerCase().includes(needle))));
+  const shown = new Set(list.map((e) => e.id));
+  const selected = [...picked].filter((id) => shown.has(id));
+  const allShownPicked = list.length > 0 && list.every((e) => picked.has(e.id));
+
+  async function bulk(action: 'add' | 'remove') {
+    setBulkMsg({});
+    try {
+      const r = await api<{ place: string; changed: number }>('/admin/employees/bulk-places', { body: { user_ids: selected, site_id: Number(bulkPlace), action } });
+      setBulkMsg({ ok: action === 'add' ? `${r.place} added for ${r.changed} ${r.changed === 1 ? 'person' : 'people'}.` : `${r.place} removed from ${r.changed} ${r.changed === 1 ? 'person' : 'people'}.` });
+      setPicked(new Set());
+      reload();
+    } catch (e) {
+      setBulkMsg({ err: (e as Error).message });
+    }
+  }
 
   return (
     <div className="page">
       <div className="toolbar">
         <div style={{ display: 'grid', gap: 4 }}>
           <h1>Employees</h1>
-          {data ? <div className="muted small">{data.employees.filter((e) => e.active).length} active{data.employees.some((e) => !e.active) ? ` · ${data.employees.filter((e) => !e.active).length} turned off` : ''}</div> : null}
+          {data ? <div className="muted small">{all.filter((e) => e.active).length} active{all.some((e) => !e.active) ? ` · ${all.filter((e) => !e.active).length} turned off` : ''}</div> : null}
         </div>
-        <button className="btn" onClick={() => setAdding(true)}>Add employee</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn secondary" onClick={() => setImporting(true)}><Icon name="upload" size={18} />Import CSV</button>
+          <button className="btn" onClick={() => setAdding(true)}>Add employee</button>
+        </div>
       </div>
-      <div className="toolbar" style={{ alignItems: 'center' }}>
-        <input className="input" style={{ maxWidth: 360, flex: 1 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, email, code…" aria-label="Search employees" />
-        <label className="small" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <input type="checkbox" checked={showLeft} onChange={(e) => setShowLeft(e.target.checked)} /> Show people who left
+
+      <div className="filter-bar">
+        <label className="search" style={{ flex: 2 }}>
+          <Icon name="search" size={18} />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, email, code…" aria-label="Search employees" />
         </label>
+        <select className="input" value={place} onChange={(e) => setPlace(e.target.value)} aria-label="Filter by place">
+          <option value="">All places</option>
+          {(sites.data?.sites ?? []).map((s) => <option key={s.id} value={s.id}>{placeLabel(s.name, s.kind)}{s.kind === 'home' ? ` · ${s.name}` : ''}</option>)}
+          <option value="none">No place assigned</option>
+        </select>
+        <select className="input" value={desig} onChange={(e) => setDesig(e.target.value)} aria-label="Filter by designation">
+          <option value="">All designations</option>
+          {designations.map((d) => <option key={d}>{d}</option>)}
+        </select>
+        <select className="input" value={access} onChange={(e) => setAccess(e.target.value)} aria-label="Filter by access">
+          <option value="">Everyone</option>
+          <option value="employee">Employees</option>
+          <option value="admin">HR admins</option>
+        </select>
+        <select className="input" value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Filter by status">
+          <option value="active">Active</option>
+          <option value="inactive">Turned off</option>
+          <option value="">Active + turned off</option>
+        </select>
       </div>
+
+      {selected.length ? (
+        <div className="bulk-bar" role="region" aria-label="Bulk actions">
+          <b className="num">{selected.length} selected</b>
+          <select className="input" value={bulkPlace} onChange={(e) => setBulkPlace(e.target.value)} aria-label="Place for selected people">
+            <option value="">Choose a place…</option>
+            {(sites.data?.sites ?? []).filter((s) => s.kind === 'office').map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+          <button className="btn small" disabled={!bulkPlace} onClick={() => void bulk('add')}>Add place</button>
+          <button className="btn danger small" disabled={!bulkPlace} onClick={() => void bulk('remove')}>Remove place</button>
+          <button className="link-btn" onClick={() => setPicked(new Set())}>Clear</button>
+        </div>
+      ) : null}
+      {bulkMsg.ok ? <div className="notice" style={{ background: 'var(--present-tint)', color: 'var(--present)' }}>{bulkMsg.ok}</div> : null}
+      {bulkMsg.err ? <div className="notice error">{bulkMsg.err}</div> : null}
+
       {error ? <div className="notice error">{error.message}</div> : null}
       {loading ? <div className="card muted">Loading…</div> : null}
       {data ? (
         <div className="table-wrap">
           <table className="list">
-            <thead><tr><th>Name</th><th>Designation</th><th>Can mark attendance at</th><th>Last check-in</th><th>Status</th></tr></thead>
+            <thead>
+              <tr>
+                <th style={{ width: 44 }}>
+                  <input type="checkbox" aria-label="Select everyone shown" checked={allShownPicked}
+                    onChange={(e) => setPicked(e.target.checked ? new Set([...picked, ...list.map((x) => x.id)]) : new Set([...picked].filter((id) => !shown.has(id))))} />
+                </th>
+                <th>Name</th><th>Designation</th><th>Can mark attendance at</th><th>Last check-in</th><th>Status</th>
+              </tr>
+            </thead>
             <tbody>
               {list.map((e) => (
-                <tr key={e.id} onClick={() => { location.hash = `#/employees/${e.id}`; }}>
+                <tr key={e.id} aria-selected={picked.has(e.id)} onClick={() => { location.hash = `#/employees/${e.id}`; }}>
+                  <td onClick={(ev) => ev.stopPropagation()}>
+                    <input type="checkbox" aria-label={`Select ${e.name}`} checked={picked.has(e.id)}
+                      onChange={(ev) => { const n = new Set(picked); if (ev.target.checked) n.add(e.id); else n.delete(e.id); setPicked(n); }} />
+                  </td>
                   <td className="who">
                     <b><a href={`#/employees/${e.id}`} onClick={(ev) => ev.stopPropagation()} style={{ color: 'inherit' }}>{e.name || e.email}</a></b>
                     <span>{[e.employee_code, e.email].filter(Boolean).join(' · ')}</span>
@@ -50,10 +134,11 @@ export function Employees() {
               ))}
             </tbody>
           </table>
-          {list.length === 0 ? <div className="empty">{q ? 'Nobody matches that search.' : 'No employees yet. Add the first one.'}</div> : null}
+          {list.length === 0 ? <div className="empty">{all.length ? 'Nobody matches these filters.' : 'No employees yet. Add the first one, or import a CSV.'}</div> : null}
         </div>
       ) : null}
       {adding ? <AddEmployee onClose={() => setAdding(false)} onAdded={reload} /> : null}
+      {importing ? <ImportEmployees sites={sites.data?.sites ?? []} existing={all} onClose={() => setImporting(false)} onDone={reload} /> : null}
     </div>
   );
 }

@@ -13,3 +13,5 @@ dist/
 .neon-cli/
 .expo-home/
 qa/out/
+face/.venv/
+face/__pycache__/

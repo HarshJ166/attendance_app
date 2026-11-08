@@ -3,7 +3,7 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { admin } from './admin.js';
 import { sql } from './db/index.js';
-import { addressFor } from './geocode.js';
+import { addressFor } from './places.js';
 import { ATTENDANCE_COLUMNS, auth, DAY, holidayOn, holidaysIn, MONTH, placesOf, todayIst, withPhoto, type Env } from './http.js';
 import { blockMessage, classify, minutesLate, monthDays, parseFix, type Marked } from './rules.js';
 import { exists, isOwnSelfieKey, istDay, MAX_SELFIE_BYTES, newSelfieKey, remove, uploadUrl } from './storage.js';

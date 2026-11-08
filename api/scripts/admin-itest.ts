@@ -145,6 +145,22 @@ await step('guards: can\'t delete a place with history, can\'t turn yourself off
   assert.deepEqual(s.json.settings, { shift_start: '10:00', grace_min: 10 });
 });
 
+await step('bulk place assignment: add a place to two people, then remove it', async () => {
+  const add = await call(ADMIN, 'POST', '/admin/employees/bulk-places', { user_ids: [e1, e2], site_id: officeId, action: 'add' });
+  assert.equal(add.status, 200);
+  const both = (await call(ADMIN, 'GET', '/admin/employees')).json.employees.filter((x: any) => [e1, e2].includes(x.id));
+  assert.ok(both.every((x: any) => x.places.some((p: any) => p.id === officeId)));
+  const rm = await call(ADMIN, 'POST', '/admin/employees/bulk-places', { user_ids: [e2], site_id: officeId, action: 'remove' });
+  assert.equal(rm.json.changed, 1);
+  assert.equal((await call(ADMIN, 'POST', '/admin/employees/bulk-places', { user_ids: [], site_id: officeId, action: 'add' })).status, 400);
+  await call(ADMIN, 'POST', '/admin/employees/bulk-places', { user_ids: [e2], site_id: officeId, action: 'add' }); // restore for later steps
+});
+
+await step('place search: pasted coordinates and Google links work without any map key', async () => {
+  const r = await call(ADMIN, 'GET', `/admin/geocode?q=${encodeURIComponent('https://www.google.com/maps/@19.2066,72.8357,17z')}`);
+  assert.deepEqual([r.json.results[0].source, r.json.results[0].lat, r.json.results[0].lng], ['google', 19.2066, 72.8357]);
+});
+
 await step('holidays: HR adds one, nobody is absent that day, register/CSV/today board show its name', async () => {
   // A past working day (Mon–Sat) inside the current month where Ravi did not check in.
   const today = istDay();

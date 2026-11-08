@@ -4,6 +4,7 @@ import { Auth0Error, addRole, createLogin, passwordLink, setBlocked, setName } f
 import { sql } from './db/index.js';
 import { adminOnly, ATTENDANCE_COLUMNS, auth, DAY, holidayOn, holidaysIn, MONTH, placesOf, withPhoto, type Env } from './http.js';
 import { csvRow, dayKind, FIXED_HOLIDAYS, monthDays, type Marked } from './rules.js';
+import { searchPlaces } from './places.js';
 import { istDay, viewUrl } from './storage.js';
 
 export const admin = new Hono<Env>();
@@ -319,6 +320,21 @@ admin.patch('/employees/:id', async (c) => {
   return c.json({ employee: out, places: await placesOf(id) });
 });
 
+// Bulk: add or remove one place for many people at once.
+admin.post('/employees/bulk-places', async (c) => {
+  const b = await body(c);
+  const ids = Array.isArray(b.user_ids) ? b.user_ids.filter((x) => Number.isInteger(x)) as number[] : [];
+  if (!ids.length || ids.length > 500 || !Number.isInteger(b.site_id) || (b.action !== 'add' && b.action !== 'remove')) {
+    return c.json(bad('Pick people, a place, and add or remove.'), 400);
+  }
+  const [site] = await sql`select id, name from sites where id = ${b.site_id as number}`;
+  if (!site) return c.json({ error: 'not_found', message: 'No such place.' }, 404);
+  const changed = b.action === 'add'
+    ? await sql`insert into user_sites ${sql(ids.map((user_id) => ({ user_id, site_id: site.id })))} on conflict do nothing returning user_id`
+    : await sql`delete from user_sites where site_id = ${site.id} and user_id in ${sql(ids)} returning user_id`;
+  return c.json({ place: site.name, action: b.action, changed: changed.length });
+});
+
 admin.post('/employees/:id/password-link', async (c) => {
   const id = idParam(c.req.param('id'));
   const [u] = id ? await sql`select auth0_sub from users where id = ${id}` : [];
@@ -381,18 +397,11 @@ admin.delete('/sites/:id', async (c) => {
   return gone ? c.json({ deleted: id }) : c.json({ error: 'not_found', message: 'No such place.' }, 404);
 });
 
-// Address search for the place picker (OpenStreetMap, India only).
+// Place picker search: pasted coordinates / Google Maps link → that point; else Mappls, then OpenStreetMap.
 admin.get('/geocode', async (c) => {
-  const q = text(c.req.query('q'), 200);
+  const q = text(c.req.query('q'), 300);
   if (!q) return c.json({ results: [] });
-  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=in&limit=5&q=${encodeURIComponent(q)}`;
-  try {
-    const res = await fetch(url, { headers: { 'user-agent': 'GeoMark-attendance/1.0', 'accept-language': 'en' }, signal: AbortSignal.timeout(4000) });
-    const list = res.ok ? ((await res.json()) as { display_name: string; lat: string; lon: string }[]) : [];
-    return c.json({ results: list.map((r) => ({ label: r.display_name, lat: Number(r.lat), lng: Number(r.lon) })) });
-  } catch {
-    return c.json({ results: [], message: 'Address search is busy. Click on the map instead.' });
-  }
+  return c.json(await searchPlaces(q));
 });
 
 // ---------- Holidays ----------
