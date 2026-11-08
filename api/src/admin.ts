@@ -286,6 +286,8 @@ admin.post('/employees', async (c) => {
     login = await createLogin(email, name, role);
   } catch (e) {
     if (e instanceof Auth0Error && e.status === 409) return c.json({ error: 'exists', message: 'This email already has a GeoMark login.' }, 409);
+    // e.g. the default password breaks the Auth0 password policy: tell HR why instead of a generic 500.
+    if (e instanceof Auth0Error && e.status === 400) return c.json({ error: 'auth0_rejected', message: `Auth0 refused this login: ${e.message.replace(/^PasswordStrengthError: /, '')}` }, 400);
     throw e;
   }
   const [u] = await sql`
@@ -422,7 +424,12 @@ admin.post('/employees/:id/reset-password', async (c) => {
   const id = idParam(c.req.param('id'));
   const [u] = id ? await sql`select auth0_sub from users where id = ${id}` : [];
   if (!u) return c.json({ error: 'not_found', message: 'No such employee.' }, 404);
-  await resetToDefault(u.auth0_sub, pw);
+  try {
+    await resetToDefault(u.auth0_sub, pw);
+  } catch (e) {
+    if (e instanceof Auth0Error && e.status === 400) return c.json({ error: 'auth0_rejected', message: `Auth0 refused the default password: ${e.message.replace(/^PasswordStrengthError: /, '')}` }, 400);
+    throw e;
+  }
   return c.json({ password: pw });
 });
 
