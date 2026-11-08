@@ -36,23 +36,37 @@ export function parseCoordinates(text: string): { lat: number; lng: number } | n
   return null;
 }
 
-const GOOGLE_HOSTS = /^(maps\.app\.goo\.gl|goo\.gl|(www\.)?google\.[a-z.]+|maps\.google\.[a-z.]+)$/i;
+const GOOGLE_HOSTS = /^(maps\.app\.goo\.gl|goo\.gl|share\.google|(www\.)?google\.[a-z.]+|maps\.google\.[a-z.]+)$/i;
 export const isGoogleMapsLink = (text: string) => {
   try {
     const u = new URL(text.trim());
-    return u.protocol === 'https:' && GOOGLE_HOSTS.test(u.hostname) && (u.hostname.includes('goo.gl') || u.pathname.startsWith('/maps'));
+    const short = u.hostname.includes('goo.gl') || u.hostname === 'share.google'; // share links (old + new style)
+    return u.protocol === 'https:' && GOOGLE_HOSTS.test(u.hostname) && (short || u.pathname.startsWith('/maps'));
   } catch {
     return false;
   }
 };
 
+/** A Google link with no pin often still names the place (…/search?q=Ashish+Talav, …/maps/place/Ashish+Talav/…). */
+export function placeNameFromGoogleUrl(url: string): string | null {
+  try {
+    const u = new URL(url);
+    const q = u.searchParams.get('q') ?? u.searchParams.get('query');
+    const fromPath = u.pathname.match(/\/maps\/place\/([^/@]+)/)?.[1];
+    const name = (q ?? (fromPath ? decodeURIComponent(fromPath.replace(/\+/g, ' ')) : null))?.trim();
+    return name && !parseCoordinates(name) ? name.slice(0, 120) : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Short share links (maps.app.goo.gl/…) only redirect to the real URL. Follow up to 5 redirects,
  * staying on Google hosts only (no SSRF), and read the coordinates from the final URL.
  */
-export async function resolveGoogleLink(link: string): Promise<{ lat: number; lng: number } | null> {
+export async function resolveGoogleLink(link: string): Promise<{ lat: number; lng: number } | { name: string } | null> {
   let url = link.trim();
-  for (let hop = 0; hop < 5; hop++) {
+  for (let hop = 0; hop < 6; hop++) {
     const direct = parseCoordinates(url);
     if (direct) return direct;
     const u = new URL(url);
@@ -60,13 +74,19 @@ export async function resolveGoogleLink(link: string): Promise<{ lat: number; ln
     const res = await fetch(url, { redirect: 'manual', headers: UA, signal: AbortSignal.timeout(4000) });
     const next = res.headers.get('location');
     if (!next) {
-      // Landed on a page: the coordinates are sometimes only inside it.
+      // Landed on a page: the coordinates are sometimes only inside it; otherwise use the place name.
       const html = res.ok ? (await res.text()).slice(0, 200_000) : '';
-      return parseCoordinates(html.match(/https:\/\/www\.google\.[^"' ]*@-?\d+\.\d+,-?\d+\.\d+[^"' ]*/)?.[0] ?? '') ?? null;
+      const inPage = parseCoordinates(html.match(/https:\/\/www\.google\.[^"' ]*@-?\d+\.\d+,-?\d+\.\d+[^"' ]*/)?.[0] ?? '');
+      if (inPage) return inPage;
+      const name = placeNameFromGoogleUrl(url);
+      return name ? { name } : null;
     }
     url = new URL(next, url).toString();
   }
-  return parseCoordinates(url);
+  const last = parseCoordinates(url);
+  if (last) return last;
+  const name = placeNameFromGoogleUrl(url);
+  return name ? { name } : null;
 }
 
 // ---------- 2. Mappls ----------
@@ -150,9 +170,15 @@ export async function searchPlaces(q: string): Promise<{ results: Hit[]; message
   }
   if (isGoogleMapsLink(q)) {
     const p = await resolveGoogleLink(q).catch(() => null);
-    return p
-      ? { results: [{ label: `From Google Maps link (${p.lat}, ${p.lng})`, ...p, source: 'google' }] }
-      : { results: [], message: 'That Google Maps link has no exact pin. In Google Maps, long-press the spot, copy the numbers (e.g. 19.2066, 72.8357) and paste them here.' };
+    if (p && 'lat' in p) return { results: [{ label: `From Google Maps link (${p.lat}, ${p.lng})`, ...p, source: 'google' }] };
+    if (p && 'name' in p) {
+      // Link carries only a place name (e.g. share.google → Google Search): search that name instead.
+      const byName = await searchPlaces(p.name);
+      return byName.results.length
+        ? { results: byName.results, message: `That Google link names “${p.name}” but has no exact pin. Pick the right match, then drag the pin onto the entrance.` }
+        : { results: [], message: `That Google link names “${p.name}” but has no exact pin, and no match was found. In Google Maps, long-press the spot and paste the numbers here.` };
+    }
+    return { results: [], message: 'That Google Maps link has no exact pin. In Google Maps, long-press the spot, copy the numbers (e.g. 19.2066, 72.8357) and paste them here.' };
   }
   try {
     const m = await mapplsSuggest(q);

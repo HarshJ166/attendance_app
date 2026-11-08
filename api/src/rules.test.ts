@@ -195,3 +195,11 @@ test('face: cosine maths, threshold, and plain-language retake messages', async 
   assert.match(faceProblem({ faces: 0 })!, /couldn’t see your face/);
   assert.match(faceProblem({ faces: 2 })!, /Only you/);
 });
+
+test('Google links: share.google recognised; place name read when there is no pin', async () => {
+  const { isGoogleMapsLink, placeNameFromGoogleUrl } = await import('./places.js');
+  assert.ok(isGoogleMapsLink('https://share.google/ulj7LYNZyXTGXzlyv'));
+  assert.equal(placeNameFromGoogleUrl('https://www.google.com/search?newwindow=1&kgmid=/g/1ptxr8fh5&q=Ashish+Talav&shndl=30'), 'Ashish Talav');
+  assert.equal(placeNameFromGoogleUrl('https://www.google.com/maps/place/Sai+Darshan+Society/data=!4m2'), 'Sai Darshan Society');
+  assert.equal(placeNameFromGoogleUrl('https://www.google.com/maps?q=19.2,72.8'), null); // that one is coordinates, handled elsewhere
+});
