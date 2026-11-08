@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { distance, longDate, placeLabel, REASON, time, useApi, useLoad, type CheckinDetail } from '../api';
 import { CheckinMap } from './CheckinMap';
+import { Lightbox } from './Lightbox';
 import { StatusChip } from './StatusChip';
 
 const FLAG: Record<string, string> = { low_accuracy: 'Weak GPS signal', face_mismatch: 'Face didn’t match the profile photo' };
@@ -14,6 +15,7 @@ export function CheckinPanel({ id, onClose, onReviewed, nav }: { id: number; onC
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState<'approve' | 'reject' | null>(null);
   const [reviewError, setReviewError] = useState<string | null>(null);
+  const [zoom, setZoom] = useState<{ src: string; alt: string; caption?: string } | null>(null);
   const panel = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -21,7 +23,7 @@ export function CheckinPanel({ id, onClose, onReviewed, nav }: { id: number; onC
   }, [id]);
   useEffect(() => {
     const keys = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') return onClose();
+      if (e.key === 'Escape') return document.querySelector('.lightbox') ? undefined : onClose();
       const typing = e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement;
       if (typing) return; // arrows move the caret while writing a note
       if (e.key === 'ArrowLeft' && nav?.prev) { e.preventDefault(); nav.prev(); }
@@ -77,14 +79,15 @@ export function CheckinPanel({ id, onClose, onReviewed, nav }: { id: number; onC
               {a.late_min > 0 && a.status !== 'rejected' ? <span className="chip late"><span className="g">!</span>Late {a.late_min} min</span> : null}
             </div>
 
-            <FaceCompare profileUrl={data.profile_photo_url} score={a.face_score} threshold={data.face_threshold}
-              onUseAsProfile={async () => {
-                await api(`/admin/employees/${a.user_id}/photo`, { body: { attendance_id: a.id } });
-                reload();
-              }} />
-
+            <h3 style={{ margin: '0 0 -12px' }}>Check-in selfie <span className="small muted" style={{ fontFamily: 'var(--body)', fontWeight: 400 }}>· taken {time(a.marked_at)}</span></h3>
             <figure className="stamp" style={{ margin: 0 }}>
-              {a.photo_url ? <img src={a.photo_url} alt={`Attendance selfie of ${a.name}`} /> : <div className="empty" style={{ color: '#fff' }}>Photo not available</div>}
+              {a.photo_url ? (
+                <button className="photo-btn" onClick={() => setZoom({ src: a.photo_url!, alt: `Attendance selfie of ${a.name}`, caption: `${a.name} · ${longDate(a.day)} · ${time(a.marked_at)}` })}
+                  aria-label="Open the selfie full screen" title="Click to view full size">
+                  <img src={a.photo_url} alt={`Attendance selfie of ${a.name}`} />
+                  <span className="zoom-hint" aria-hidden="true">⤢ View full size</span>
+                </button>
+              ) : <div className="empty" style={{ color: '#fff' }}>Photo not available</div>}
               <figcaption className="stamp-text">
                 <div className={`place ${a.status === 'present' ? 'ok' : 'bad'}`}>
                   {a.status === 'present' ? '✓ ' : '! '}
@@ -95,6 +98,13 @@ export function CheckinPanel({ id, onClose, onReviewed, nav }: { id: number; onC
                 <div className="mono">{a.lat.toFixed(5)}, {a.lng.toFixed(5)} · GPS ±{Math.round(a.accuracy_m)} m</div>
               </figcaption>
             </figure>
+
+            <FaceCompare profileUrl={data.profile_photo_url} score={a.face_score} threshold={data.face_threshold}
+              onZoom={() => data.profile_photo_url && setZoom({ src: data.profile_photo_url, alt: `Profile photo of ${a.name}`, caption: `${a.name} · profile photo` })}
+              onUseAsProfile={async () => {
+                await api(`/admin/employees/${a.user_id}/photo`, { body: { attendance_id: a.id } });
+                reload();
+              }} />
 
             <dl className="facts">
               <dt>Checked in</dt><dd className="num">{time(a.marked_at)}{a.late_min > 0 ? ` (late by ${a.late_min} min)` : ''}</dd>
@@ -147,13 +157,14 @@ export function CheckinPanel({ id, onClose, onReviewed, nav }: { id: number; onC
           </>
         ) : null}
       </aside>
+      {zoom ? <Lightbox {...zoom} onClose={() => setZoom(null)} /> : null}
     </>
   );
 }
 
 /** Profile photo beside the score, so HR can judge the match by eye too. */
-function FaceCompare({ profileUrl, score, threshold, onUseAsProfile }: {
-  profileUrl: string | null; score: number | null; threshold: number; onUseAsProfile: () => Promise<void>;
+function FaceCompare({ profileUrl, score, threshold, onUseAsProfile, onZoom }: {
+  profileUrl: string | null; score: number | null; threshold: number; onUseAsProfile: () => Promise<void>; onZoom: () => void;
 }) {
   const [state, setState] = useState<{ busy?: boolean; err?: string; ok?: boolean }>({});
   const use = async () => {
@@ -162,10 +173,14 @@ function FaceCompare({ profileUrl, score, threshold, onUseAsProfile }: {
   };
   const matched = score !== null && score >= threshold;
   return (
-    <section className="face-compare" aria-label="Face check">
+    <section className="face-compare" aria-label="Face check against the profile photo">
       <div className="face-ref">
-        {profileUrl ? <img src={profileUrl} alt="Profile photo" /> : <div className="face-ref-empty">No profile photo</div>}
-        <span className="small muted">Profile photo</span>
+        {profileUrl ? (
+          <button className="photo-btn" onClick={onZoom} aria-label="Open the profile photo full screen" title="Click to view full size">
+            <img src={profileUrl} alt="Profile photo" />
+          </button>
+        ) : <div className="face-ref-empty">No profile photo</div>}
+        <span className="small muted">Reference (profile)</span>
       </div>
       <div style={{ display: 'grid', gap: 6, alignContent: 'center' }}>
         {score === null ? (

@@ -112,11 +112,15 @@ table.list { width: 100%; border-collapse: collapse; background: var(--surface);
 
 /* ---------- side panel ---------- */
 .scrim { position: fixed; inset: 0; background: rgba(21, 32, 27, 0.28); z-index: 900; }
-.panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100vw); background: var(--surface); z-index: 1000; overflow-y: auto; box-shadow: -8px 0 32px rgba(21, 32, 27, 0.16); display: grid; align-content: start; gap: 20px; padding: 24px; }
+.panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100vw); background: var(--surface); z-index: 1000; overflow-y: auto; box-shadow: -8px 0 32px rgba(21, 32, 27, 0.16); display: grid; align-content: start; gap: 20px; padding: 24px;
+  /* Rows take their full content height and the PANEL scrolls. Without this, a fixed-height grid shrinks
+     rows to their minimum, and a child with overflow:hidden (the selfie) has a minimum of 0 → it vanished. */
+  grid-auto-rows: max-content; }
 .panel-head { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
-.stamp { position: relative; border-radius: var(--radius); overflow: hidden; background: var(--ink); min-height: 260px; }
-.stamp img { display: block; width: 100%; aspect-ratio: 3 / 4; max-height: 520px; object-fit: cover; }
-.stamp-text { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(21, 32, 27, 0.8); color: #fff; padding: 12px 14px; font-size: 14px; line-height: 1.45; }
+/* Whole selfie (never cropped), geo-stamp in a strip BELOW it so nothing covers the face. */
+.stamp { border-radius: var(--radius); overflow: hidden; background: var(--ink); }
+.stamp img { display: block; width: 100%; max-height: 60vh; object-fit: contain; background: var(--ink); }
+.stamp-text { background: var(--ink); color: #fff; padding: 12px 14px; font-size: 14px; line-height: 1.45; border-top: 1px solid rgba(255, 255, 255, 0.12); }
 .stamp-text .place { font-weight: 700; font-size: 16px; }
 .stamp-text .place.ok { color: #9fe0be; }
 .stamp-text .place.bad { color: #ffd38a; }
@@ -251,8 +255,20 @@ button.cal-day:hover { outline: 2px solid var(--ink); }
 .bulk-bar select.input { min-height: 36px; }
 
 /* face compare in the View panel */
-.face-compare { display: grid; grid-template-columns: 120px 1fr; gap: 16px; align-items: center; border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
+.face-compare { display: grid; grid-template-columns: 76px 1fr; gap: 14px; align-items: center; border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; }
 .face-ref { display: grid; gap: 4px; justify-items: center; }
-.face-ref img, .face-ref-empty { width: 120px; height: 120px; border-radius: 12px; object-fit: cover; background: var(--muted-tint); }
-.face-ref-empty { display: grid; place-items: center; font-size: 13px; color: var(--muted); text-align: center; padding: 8px; }
+.face-ref img, .face-ref-empty { width: 76px; height: 76px; border-radius: 10px; object-fit: cover; background: var(--muted-tint); }
+.face-ref-empty { display: grid; place-items: center; font-size: 11px; color: var(--muted); text-align: center; padding: 6px; }
 label.btn[aria-disabled='true'] { opacity: 0.6; pointer-events: none; }
+
+/* click-to-enlarge photos + full-screen viewer */
+.photo-btn { display: block; position: relative; width: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.photo-btn:focus-visible { outline-offset: -3px; }
+.zoom-hint { position: absolute; top: 10px; right: 10px; background: rgba(21, 32, 27, 0.75); color: #fff; font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 999px; opacity: 0; transition: opacity 120ms; }
+.photo-btn:hover .zoom-hint, .photo-btn:focus-visible .zoom-hint { opacity: 1; }
+.face-ref .photo-btn { width: 76px; }
+.lightbox { position: fixed; inset: 0; z-index: 2000; background: rgba(10, 16, 13, 0.92); display: grid; place-items: center; padding: 24px; cursor: zoom-out; }
+.lightbox figure { margin: 0; display: grid; gap: 10px; justify-items: center; cursor: default; }
+.lightbox img { max-width: min(96vw, 1100px); max-height: 84vh; object-fit: contain; border-radius: 8px; box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5); }
+.lightbox figcaption { color: #e3f1ea; font-size: 14px; }
+.lightbox-actions { position: fixed; top: 16px; right: 16px; display: flex; gap: 8px; }

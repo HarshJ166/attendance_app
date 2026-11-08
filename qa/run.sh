@@ -28,4 +28,4 @@ node --input-type=module -e 'import postgres from "postgres"; const s=postgres(p
 npx tsx --env-file=.env scripts/qa-server.ts > "$OUT/qa-server.log" 2>&1 &
 API_PID=$!
 for i in $(seq 1 60); do curl -s -o /dev/null http://127.0.0.1:8788/health && break; sleep 0.5; done
-node "$ROOT/qa/admin-pages.mjs" "$OUT"
+node "$ROOT/qa/${QA_SCRIPT:-admin-pages.mjs}" "$OUT"

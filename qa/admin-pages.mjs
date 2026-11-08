@@ -99,7 +99,16 @@ await step('Dashboard → View panel with map', async () => {
   await page.getByRole('row', { name: /Ravi Shah/ }).getByRole('button', { name: 'View' }).click();
   await page.getByRole('dialog', { name: 'Check-in details' }).waitFor();
   await page.locator('.leaflet-container').first().waitFor();
+  // The selfie must actually be VISIBLE (this regressed once: rendered but squashed to 0 px tall).
+  const selfieH = await page.evaluate(() => Math.round(document.querySelector('.panel .stamp')?.getBoundingClientRect().height ?? 0));
+  if (selfieH < 200) throw new Error(`check-in selfie is only ${selfieH}px tall in the View panel`);
   await noCrash(); await shot('2-view-panel');
+  await page.getByRole('button', { name: 'Open the selfie full screen' }).click();
+  await page.locator('.lightbox img').waitFor();
+  await shot('2b-photo-full-screen');
+  await page.keyboard.press('Escape');
+  await page.locator('.lightbox').waitFor({ state: 'detached' });
+  await page.getByRole('dialog', { name: 'Check-in details' }).waitFor(); // Esc closed only the viewer
   await page.getByRole('button', { name: 'Close details' }).click();
 });
 await step('Review', async () => {
