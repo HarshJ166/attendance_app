@@ -43,6 +43,7 @@ function Main() {
   const { authorize, clearSession, getCredentials, user, isLoading } = useAuth0();
   const [me, setMe] = useState<Me | null>(null);
   const [today, setToday] = useState<Attendance | null>(null);
+  const [holiday, setHoliday] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('today');
   const [capturing, setCapturing] = useState(false);
   const [problem, setProblem] = useState<ApiError | null>(null);
@@ -59,10 +60,11 @@ function Main() {
       const token = await getToken();
       const [m, t] = await Promise.all([
         api<Me>(token, '/me'),
-        api<{ attendance: Attendance | null }>(token, '/attendance/today'),
+        api<{ attendance: Attendance | null; holiday: string | null }>(token, '/attendance/today'),
       ]);
       setMe(m);
       setToday(t.attendance);
+      setHoliday(t.holiday);
     } catch (e) {
       setProblem(e instanceof ApiError ? e : new ApiError(401, 'unauthenticated', 'Please log in again.'));
     }
@@ -141,7 +143,7 @@ function Main() {
   return (
     <View style={{ flex: 1, backgroundColor: color.bg }}>
       <View style={{ flex: 1 }}>
-        {tab === 'today' ? <Home me={me} attendance={today} onMark={() => setCapturing(true)} /> : null}
+        {tab === 'today' ? <Home me={me} attendance={today} holiday={holiday} onMark={() => setCapturing(true)} /> : null}
         {tab === 'calendar' ? <CalendarTab getToken={getToken} /> : null}
         {tab === 'stats' ? <Stats getToken={getToken} /> : null}
         {tab === 'profile' ? <Profile me={me} onLogout={() => void logout()} /> : null}

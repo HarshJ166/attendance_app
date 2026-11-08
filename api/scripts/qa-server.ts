@@ -69,7 +69,12 @@ await sql`insert into attendance (user_id, day, lat, lng, accuracy_m, mocked, si
 await sql`insert into checkin_attempts (user_id, lat, lng, accuracy_m, mocked, reason, site_id, distance_m) values
   (${ids['qa|imran']}, 19.2310, 72.8605, 15, false, 'outside_site', ${office.id}, 3600),
   (${ids['qa|imran']}, 19.2066, 72.8357, 5, true, 'mock_location', ${office.id}, 0)`;
-console.log('[qa] seeded', Object.keys(ids).length, 'people');
+// A holiday 3 days ago (moved off Sunday), so dashboard/register/calendar show one.
+let hol = dayOffset(3);
+if (new Date(`${hol}T00:00:00Z`).getUTCDay() === 0) hol = dayOffset(4);
+await sql`delete from attendance where day = ${hol}`;
+await sql`insert into holidays (day, name) values (${hol}, 'Test Festival')`;
+console.log('[qa] seeded', Object.keys(ids).length, 'people, holiday', hol);
 
 serve({
   hostname: '127.0.0.1',

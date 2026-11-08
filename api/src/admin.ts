@@ -2,8 +2,8 @@
 import { Hono } from 'hono';
 import { Auth0Error, addRole, createLogin, passwordLink, setBlocked, setName } from './auth0-admin.js';
 import { sql } from './db/index.js';
-import { adminOnly, ATTENDANCE_COLUMNS, auth, DAY, MONTH, placesOf, withPhoto, type Env } from './http.js';
-import { csvRow, dayKind, monthDays, type Marked } from './rules.js';
+import { adminOnly, ATTENDANCE_COLUMNS, auth, DAY, holidayOn, holidaysIn, MONTH, placesOf, withPhoto, type Env } from './http.js';
+import { csvRow, dayKind, FIXED_HOLIDAYS, monthDays, type Marked } from './rules.js';
 import { istDay, viewUrl } from './storage.js';
 
 export const admin = new Hono<Env>();
@@ -36,9 +36,11 @@ admin.get('/today', async (c) => {
     where u.active and (u.created_at at time zone 'Asia/Kolkata')::date <= ${date}
     order by a.marked_at nulls last, u.name`;
 
+  const holiday = await holidayOn(date);
   const people = await Promise.all(rows.map(async (r) => {
-    const kind = dayKind(date, today, joinedDay(r.created_at), (r.status as Marked | null) ?? undefined);
+    const kind = dayKind(date, today, joinedDay(r.created_at), (r.status as Marked | null) ?? undefined, holiday !== null);
     // HR sees "rejected" as its own state; the employee just sees absent.
+    // HR always sees its own decision on the row; counting-wise a rejected Sunday/holiday is not an absence.
     const status = r.status === 'rejected' ? 'rejected' : kind === 'today' ? 'not_yet' : kind;
     return {
       user: { id: r.uid, name: r.name, email: r.email, employee_code: r.employee_code, designation: r.designation },
@@ -64,8 +66,9 @@ admin.get('/today', async (c) => {
   return c.json({
     date,
     settings,
+    holiday,
     summary: {
-      expected: people.filter((p) => p.status !== 'off').length,
+      expected: people.filter((p) => p.status !== 'off' && p.status !== 'holiday').length,
       present: n('present') + n('flagged'),
       late: people.filter((p) => p.attendance && p.attendance.status !== 'rejected' && p.attendance.late_min > 0).length,
       flagged: n('flagged'),
@@ -73,6 +76,7 @@ admin.get('/today', async (c) => {
       absent: n('absent'),
       not_yet: n('not_yet'),
       off: n('off'),
+      holiday: n('holiday'),
       blocked_attempts: attempts.length,
     },
     people,
@@ -89,6 +93,7 @@ admin.get('/trend', async (c) => {
                              (now() at time zone 'Asia/Kolkata')::date, interval '1 day')::date as day
     )
     select d.day::text as day, extract(dow from d.day)::int as weekday,
+      (select h.name from holidays h where h.day = d.day) as holiday,
       (select count(*) from users u where u.active and (u.created_at at time zone 'Asia/Kolkata')::date <= d.day)::int as headcount,
       (select count(*) from attendance a where a.day = d.day and a.status in ('present', 'flagged'))::int as present,
       (select count(*) from attendance a where a.day = d.day and a.status in ('present', 'flagged') and a.late_min > 0)::int as late
@@ -151,6 +156,7 @@ async function register(month: string) {
   const rows = await sql`
     select ${ATTENDANCE_COLUMNS} from attendance a left join sites s on s.id = a.site_id
     where to_char(a.day, 'YYYY-MM') = ${month}`;
+  const holidays = await holidaysIn(month);
   const byUser = new Map<number, (typeof rows)[number][]>();
   for (const r of rows) {
     const list = byUser.get(r.user_id) ?? [];
@@ -161,9 +167,9 @@ async function register(month: string) {
   return people.map((p) => {
     const mine = byUser.get(p.id) ?? [];
     const byDay = new Map(mine.map((r) => [r.day as string, r]));
-    const days = monthDays(month, today, joinedDay(p.created_at), new Map(mine.map((r) => [r.day as string, r.status as Marked]))).map((d) => {
+    const days = monthDays(month, today, joinedDay(p.created_at), new Map(mine.map((r) => [r.day as string, r.status as Marked])), holidays).map((d) => {
       const r = byDay.get(d.day);
-      return { ...d, rejected: r?.status === 'rejected', late_min: r && r.status !== 'rejected' ? r.late_min : 0, attendance_id: r?.id ?? null, record: r ?? null };
+      return { ...d, rejected: r?.status === 'rejected' && d.kind === 'absent', late_min: r && r.status !== 'rejected' ? r.late_min : 0, attendance_id: r?.id ?? null, record: r ?? null };
     });
     const count = (k: string) => days.filter((d) => d.kind === k).length;
     const present = count('present') + count('flagged');
@@ -199,7 +205,7 @@ admin.get('/export.csv', async (c) => {
       const r = d.record;
       lines.push(csvRow([
         d.day, p.user.employee_code, p.user.name, p.user.email,
-        d.rejected ? 'Absent (rejected by HR)' : word[d.kind] ?? d.kind,
+        d.rejected ? 'Absent (rejected by HR)' : d.kind === 'holiday' ? `Holiday: ${d.holiday}` : word[d.kind] ?? d.kind,
         r && !d.rejected ? ist(r.marked_at) : '', d.late_min || '',
         r ? (r.site_kind === 'home' ? 'Home (WFH)' : r.site_name) : '', r?.distance_m ?? '', r?.address ?? '',
         r?.lat ?? '', r?.lng ?? '', r?.review_note ?? '',
@@ -387,6 +393,45 @@ admin.get('/geocode', async (c) => {
   } catch {
     return c.json({ results: [], message: 'Address search is busy. Click on the map instead.' });
   }
+});
+
+// ---------- Holidays ----------
+
+admin.get('/holidays', async (c) => {
+  const year = c.req.query('year') ?? istDay().slice(0, 4);
+  if (!/^\d{4}$/.test(year)) return c.json(bad('year must look like 2026'), 400);
+  const rows = await sql`
+    select h.day::text as day, h.name, u.name as added_by from holidays h left join users u on u.id = h.created_by
+    where extract(year from h.day) = ${Number(year)} order by h.day`;
+  return c.json({ year, holidays: rows });
+});
+
+admin.post('/holidays', async (c) => {
+  const b = await body(c);
+  const name = text(b.name, 80);
+  if (typeof b.day !== 'string' || !DAY.test(b.day) || Number.isNaN(Date.parse(b.day))) return c.json(bad('Pick a date.'), 400);
+  if (!name) return c.json(bad('Give the holiday a name, e.g. Diwali.'), 400);
+  const [h] = await sql`
+    insert into holidays (day, name, created_by) values (${b.day}, ${name}, ${c.get('user').id})
+    on conflict (day) do update set name = excluded.name
+    returning day::text as day, name`;
+  return c.json({ holiday: h }, 201);
+});
+
+// One click: the fixed-date national holidays for a year (skips dates HR already set).
+admin.post('/holidays/fixed', async (c) => {
+  const year = String((await body(c)).year ?? '');
+  if (!/^\d{4}$/.test(year)) return c.json(bad('year must look like 2026'), 400);
+  const rows = FIXED_HOLIDAYS.map(([md, name]) => ({ day: `${year}-${md}`, name, created_by: c.get('user').id }));
+  const added = await sql`insert into holidays ${sql(rows)} on conflict (day) do nothing returning day::text as day, name`;
+  return c.json({ added });
+});
+
+admin.delete('/holidays/:day', async (c) => {
+  const day = c.req.param('day');
+  if (!DAY.test(day)) return c.json(bad('bad date'), 400);
+  const [gone] = await sql`delete from holidays where day = ${day} returning day::text as day`;
+  return gone ? c.json({ deleted: day }) : c.json({ error: 'not_found', message: 'No holiday on that date.' }, 404);
 });
 
 // ---------- Settings ----------

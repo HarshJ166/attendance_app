@@ -137,7 +137,19 @@ await step('Settings', async () => {
   await page.getByRole('link', { name: 'Settings' }).click();
   await page.getByRole('heading', { name: 'Settings' }).waitFor();
   await page.getByText('Shift and late rule').waitFor();
+  await page.getByRole('heading', { name: 'Holidays' }).waitFor();
+  await page.getByText('Test Festival').waitFor();
   await noCrash(); await shot('10-settings');
+});
+await step('Settings → add a holiday + fixed national holidays', async () => {
+  await page.getByLabel('Date').last().fill('2026-12-31');
+  await page.getByLabel('Name').fill('Year end');
+  await page.getByRole('button', { name: 'Add holiday' }).click();
+  await page.getByText('Year end added').waitFor();
+  await page.getByRole('button', { name: /Add fixed national holidays/ }).click();
+  await page.getByText(/Added .*Christmas|already in the list/).waitFor();
+  await page.getByRole('cell', { name: 'Christmas' }).waitFor();
+  await noCrash(); await shot('11-holidays');
 });
 await step('Deep link reload keeps the page (#/places)', async () => {
   await page.goto('http://localhost:5173/#/places');

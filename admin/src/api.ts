@@ -57,7 +57,7 @@ export function useLoad<T>(path: string | null) {
 }
 
 // ---------- shapes from the API ----------
-export type Status = 'present' | 'flagged' | 'rejected' | 'absent' | 'not_yet' | 'off';
+export type Status = 'present' | 'flagged' | 'rejected' | 'absent' | 'not_yet' | 'off' | 'holiday';
 export type Place = { id: number; name: string; kind: 'office' | 'home'; lat: number; lng: number; radius_m: number };
 export type Person = { id: number; name: string; email: string | null; employee_code: string | null; designation: string | null };
 export type Row = {
@@ -73,7 +73,8 @@ export type Attempt = { id: number; at: string; reason: string; distance_m: numb
 export type Today = {
   date: string;
   settings: { shift_start: string; grace_min: number };
-  summary: { expected: number; present: number; late: number; flagged: number; rejected: number; absent: number; not_yet: number; off: number; blocked_attempts: number };
+  holiday: string | null;
+  summary: { expected: number; present: number; late: number; flagged: number; rejected: number; absent: number; not_yet: number; off: number; holiday: number; blocked_attempts: number };
   people: Row[];
   attempts: Attempt[];
 };

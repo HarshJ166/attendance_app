@@ -5,7 +5,7 @@ import { CELL, thisMonth } from '../calendar';
 import { MonthSwitch } from '../components/MonthSwitch';
 import { PlaceEditor } from './Places';
 
-type Day = { day: string; weekday: number; kind: string; rejected: boolean; late_min: number; attendance_id: number | null; marked_at: string | null; site_name: string | null; site_kind: string | null; distance_m: number | null };
+type Day = { day: string; weekday: number; kind: string; holiday?: string | null; rejected: boolean; late_min: number; attendance_id: number | null; marked_at: string | null; site_name: string | null; site_kind: string | null; distance_m: number | null };
 type Profile = {
   employee: { id: number; name: string; email: string | null; employee_code: string | null; phone: string | null; designation: string | null; role: 'employee' | 'admin'; active: boolean; created_at: string; consented_at: string | null };
   places: Place[];
@@ -108,7 +108,7 @@ export function EmployeeProfile({ id }: { id: number }) {
           {Array.from({ length: lead }, (_, i) => <div key={`b${i}`} />)}
           {data.days.map((d) => {
             const look = CELL[d.rejected ? 'absent' : d.kind] ?? CELL.future;
-            const label = `${d.day}: ${d.rejected ? 'Rejected by HR' : look.word}${d.marked_at ? `, ${time(d.marked_at)}` : ''}${d.late_min ? `, late ${d.late_min} min` : ''}`;
+            const label = `${d.day}: ${d.rejected ? 'Rejected by HR' : d.holiday && d.kind === 'holiday' ? `Holiday, ${d.holiday}` : look.word}${d.marked_at ? `, ${time(d.marked_at)}` : ''}${d.late_min ? `, late ${d.late_min} min` : ''}`;
             return d.attendance_id ? (
               <button key={d.day} className={`cal-day ${look.cls}`} onClick={() => setOpen(d.attendance_id)} aria-label={label} title={label}>
                 <span className="num">{Number(d.day.slice(8))}</span>
@@ -120,11 +120,12 @@ export function EmployeeProfile({ id }: { id: number }) {
               <div key={d.day} className={`cal-day ${look.cls}`} aria-label={label} title={label} role="gridcell">
                 <span className="num">{Number(d.day.slice(8))}</span>
                 <span className="g">{look.glyph}</span>
+                {d.kind === 'holiday' && d.holiday ? <span className="hname">{d.holiday}</span> : null}
               </div>
             );
           })}
         </div>
-        <div className="key"><span>✓ present</span><span>! HR check</span><span>✗ absent / rejected</span><span><i style={{ background: 'var(--warn)', width: 8, height: 8 }} />late</span><span>off = Sunday</span><span>Click a marked day for the selfie and map</span></div>
+        <div className="key"><span>✓ present</span><span>! HR check</span><span>✗ absent / rejected</span><span><i style={{ background: 'var(--warn)', width: 8, height: 8 }} />late</span><span>off = Sunday</span><span>★ holiday</span><span>Click a marked day for the selfie and map</span></div>
       </section>
 
       {data.attempts.length ? (

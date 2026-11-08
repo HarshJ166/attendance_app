@@ -1,20 +1,22 @@
 import { useState } from 'react';
 import { useApi, useLoad } from '../api';
+import { Holidays } from '../components/Holidays';
 
 type S = { shift_start: string; grace_min: number };
 
 export function Settings() {
   const { data, error, loading } = useLoad<{ settings: S }>('/admin/settings');
   return (
-    <div className="page" style={{ maxWidth: 640 }}>
+    <div className="page" style={{ maxWidth: 820 }}>
       <h1>Settings</h1>
       {error ? <div className="notice error">{error.message}</div> : null}
       {loading ? <div className="card muted">Loading…</div> : null}
       {data ? <ShiftForm initial={data.settings} /> : null}
+      <Holidays />
       <section className="card" style={{ display: 'grid', gap: 8 }}>
         <h2>Fixed rules</h2>
         <ul style={{ margin: 0, paddingLeft: 18 }} className="small">
-          <li>Weekly off: Sunday.</li>
+          <li>Weekly off: Sunday, plus the holidays above.</li>
           <li>Check-ins outside all of a person’s places, or with a fake-location app, are blocked and logged.</li>
           <li>Selfies are deleted automatically after 90 days.</li>
         </ul>

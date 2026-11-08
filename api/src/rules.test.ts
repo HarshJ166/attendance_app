@@ -143,3 +143,15 @@ test('csvCell quotes, doubles quotes, and blocks spreadsheet formulas', async ()
   assert.equal(csvCell(null), '""');
   assert.equal(csvRow([1, 'a,b', 19.2]), '"1","a,b","19.2"');
 });
+
+test('holidays: nobody absent, check-in still present, upcoming shows as holiday, before joining wins', async () => {
+  const { dayKind, monthDays } = await import('./rules.js');
+  assert.equal(dayKind('2026-11-09', '2026-11-10', '2026-11-01', undefined, true), 'holiday'); // past holiday, no check-in
+  assert.equal(dayKind('2026-11-09', '2026-11-10', '2026-11-01', 'present', true), 'present'); // worked on a holiday
+  assert.equal(dayKind('2026-11-09', '2026-11-10', '2026-11-01', 'rejected', true), 'holiday'); // rejected on a holiday ≠ absent
+  assert.equal(dayKind('2026-11-20', '2026-11-10', '2026-11-01', undefined, true), 'holiday'); // upcoming holiday
+  assert.equal(dayKind('2026-10-30', '2026-11-10', '2026-11-01', undefined, true), 'before_joining');
+  const days = monthDays('2026-11', '2026-11-30', '2026-01-01', new Map(), new Map([['2026-11-09', 'Diwali']]));
+  assert.deepEqual([days[8].kind, days[8].holiday], ['holiday', 'Diwali']);
+  assert.equal(days[9].holiday, null);
+});

@@ -44,12 +44,12 @@ export type Attendance = {
   photo_url: string | null;
 };
 
-export type DayKind = 'present' | 'flagged' | 'absent' | 'off' | 'today' | 'future' | 'before_joining';
+export type DayKind = 'present' | 'flagged' | 'absent' | 'off' | 'holiday' | 'today' | 'future' | 'before_joining';
 export type CalendarDay = {
-  day: string; weekday: number; kind: DayKind;
+  day: string; weekday: number; kind: DayKind; holiday?: string | null;
   marked_at?: string; site_name?: string | null; site_kind?: 'office' | 'home' | null; distance_m?: number | null; address?: string | null; late_min?: number;
 };
-export type Month = { month: string; days: CalendarDay[]; summary: { present: number; flagged: number; absent: number; late: number } };
+export type Month = { month: string; days: CalendarDay[]; summary: { present: number; flagged: number; absent: number; late: number; holidays: number } };
 
 /** "Dahanukarwadi" or "Home (WFH)" */
 export const placeLabel = (name: string | null | undefined, kind: 'office' | 'home' | null | undefined) =>

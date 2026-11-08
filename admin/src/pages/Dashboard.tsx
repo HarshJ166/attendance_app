@@ -18,7 +18,7 @@ export function Dashboard({ onReviewed }: { onReviewed: () => void }) {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]['key']>('all');
   const [open, setOpen] = useState<number | null>(null);
   const today = useLoad<Today>(`/admin/today?date=${date}`);
-  const trend = useLoad<{ days: { day: string; weekday: number; headcount: number; present: number; late: number }[] }>('/admin/trend?days=30');
+  const trend = useLoad<{ days: { day: string; weekday: number; headcount: number; present: number; late: number; holiday: string | null }[] }>('/admin/trend?days=30');
   const t = today.data;
 
   const rows = (t?.people ?? []).filter((p) => {
@@ -46,7 +46,9 @@ export function Dashboard({ onReviewed }: { onReviewed: () => void }) {
 
       {t ? (
         <div className="card summary" aria-live="polite">
-          {t.summary.expected === 0 && t.summary.off > 0 ? (
+          {t.holiday ? (
+            <>★ <b>Holiday: {t.holiday}.</b> Nobody is marked absent today{t.summary.present ? <> · <b>{t.summary.present}</b> checked in anyway</> : null}.</>
+          ) : t.summary.expected === 0 && t.summary.off > 0 ? (
             <>Sunday: weekly off.</>
           ) : (
             <>

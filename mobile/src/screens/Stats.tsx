@@ -80,7 +80,7 @@ export function Stats({ getToken }: { getToken: () => Promise<string> }) {
             </View>
           ))}
         </View>
-        <T kind="small">Sundays are weekly offs and are not counted.</T>
+        <T kind="small">Sundays and holidays{data.summary.holidays ? ` (${data.summary.holidays} this month)` : ''} are not counted.</T>
       </>
     );
   }

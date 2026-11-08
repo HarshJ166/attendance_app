@@ -109,3 +109,12 @@ alter table attendance add constraint attendance_status_check check (status in (
 alter table attendance add column if not exists reviewed_by integer references users(id);
 alter table attendance add column if not exists reviewed_at timestamptz;
 alter table attendance add column if not exists review_note text;
+
+-- ===== Holidays (2026-11-08) =====
+-- Company holidays, added by HR. Like Sunday: nobody is absent; anyone who checks in still counts as present.
+create table if not exists holidays (
+  day         date primary key,
+  name        text not null check (length(name) between 1 and 80),
+  created_by  integer references users(id) on delete set null,
+  created_at  timestamptz not null default now()
+);

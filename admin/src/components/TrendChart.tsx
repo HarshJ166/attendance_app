@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { shortDate } from '../api';
 
-type Day = { day: string; weekday: number; headcount: number; present: number; late: number };
+type Day = { day: string; weekday: number; headcount: number; present: number; late: number; holiday?: string | null };
+const isOff = (d: Day) => d.weekday === 0 || !!d.holiday;
 
 /**
  * Attendance % per working day (one series → no legend; the title names it).
@@ -16,7 +17,7 @@ export function TrendChart({ days }: { days: Day[] }) {
   const bar = Math.min(18, slot - 2);
   const pct = (d: Day) => (d.headcount ? Math.round((d.present / d.headcount) * 100) : 0);
   const y = (p: number) => top + plotH - (p / 100) * plotH;
-  const working = days.filter((d) => d.weekday !== 0 && d.headcount > 0);
+  const working = days.filter((d) => !isOff(d) && d.headcount > 0);
   const avg = working.length ? Math.round(working.reduce((s, d) => s + pct(d), 0) / working.length) : null;
   const h = hover != null ? days[hover] : null;
 
@@ -31,7 +32,7 @@ export function TrendChart({ days }: { days: Day[] }) {
         ))}
         {days.map((d, i) => {
           const x = left + i * slot + (slot - bar) / 2;
-          const off = d.weekday === 0;
+          const off = isOff(d);
           const p = pct(d);
           const barTop = y(p);
           const height = Math.max(0, top + plotH - barTop);
@@ -40,7 +41,7 @@ export function TrendChart({ days }: { days: Day[] }) {
               key={d.day}
               tabIndex={0}
               role="img"
-              aria-label={`${shortDate(d.day)}: ${off ? 'Sunday off' : `${d.present} of ${d.headcount} present, ${p}%, ${d.late} late`}`}
+              aria-label={`${shortDate(d.day)}: ${off ? (d.holiday ? `Holiday, ${d.holiday}` : 'Sunday off') : `${d.present} of ${d.headcount} present, ${p}%, ${d.late} late`}`}
               onMouseEnter={() => setHover(i)}
               onMouseLeave={() => setHover(null)}
               onFocus={() => setHover(i)}
@@ -48,7 +49,7 @@ export function TrendChart({ days }: { days: Day[] }) {
             >
               <rect x={left + i * slot} y={top} width={slot} height={plotH} fill="transparent" />
               {off ? (
-                <text x={x + bar / 2} y={top + plotH - 4} textAnchor="middle" fontSize={10} fill="#52615a">off</text>
+                <text x={x + bar / 2} y={top + plotH - 4} textAnchor="middle" fontSize={10} fill="#52615a">{d.holiday ? '★' : 'off'}</text>
               ) : height > 0 ? (
                 <path
                   d={`M${x},${top + plotH} V${barTop + 4} Q${x},${barTop} ${x + 4},${barTop} H${x + bar - 4} Q${x + bar},${barTop} ${x + bar},${barTop + 4} V${top + plotH} Z`}
@@ -63,10 +64,10 @@ export function TrendChart({ days }: { days: Day[] }) {
         })}
       </svg>
       {h && hover != null ? (
-        <div className="tip" style={{ left: `${((left + hover * slot + slot / 2) / W) * 100}%`, top: `${(y(h.weekday === 0 ? 0 : pct(h)) / H) * 100}%` }}>
+        <div className="tip" style={{ left: `${((left + hover * slot + slot / 2) / W) * 100}%`, top: `${(y(isOff(h) ? 0 : pct(h)) / H) * 100}%` }}>
           <b>{shortDate(h.day)}</b>
           <br />
-          {h.weekday === 0 ? 'Sunday · weekly off' : `${h.present} of ${h.headcount} present (${pct(h)}%) · ${h.late} late`}
+          {h.holiday ? `Holiday · ${h.holiday}` : h.weekday === 0 ? 'Sunday · weekly off' : `${h.present} of ${h.headcount} present (${pct(h)}%) · ${h.late} late`}
         </div>
       ) : null}
       <details className="small" style={{ marginTop: 8 }}>
@@ -77,10 +78,10 @@ export function TrendChart({ days }: { days: Day[] }) {
             {days.map((d) => (
               <tr key={d.day} style={{ cursor: 'default' }}>
                 <td>{shortDate(d.day)}</td>
-                <td className="num">{d.weekday === 0 ? 'off' : d.present}</td>
+                <td className="num">{isOff(d) ? (d.holiday ?? 'off') : d.present}</td>
                 <td className="num">{d.headcount}</td>
-                <td className="num">{d.weekday === 0 ? '' : `${pct(d)}%`}</td>
-                <td className="num">{d.weekday === 0 ? '' : d.late}</td>
+                <td className="num">{isOff(d) ? '' : `${pct(d)}%`}</td>
+                <td className="num">{isOff(d) ? '' : d.late}</td>
               </tr>
             ))}
           </tbody>

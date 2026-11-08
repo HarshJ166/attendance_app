@@ -30,14 +30,17 @@ export const auth = createMiddleware<Env>(async (c, next) => {
     return c.json({ error: 'forbidden', message: 'Your account has no access yet. Please contact HR.' }, 403);
   }
 
-  // ponytail: upsert on every request; fine for <100 users, cache if traffic grows.
-  const [user] = await sql<User[]>`
-    insert into users (auth0_sub, email, name)
-    values (${identity.sub}, ${identity.email}, ${identity.name})
-    on conflict (auth0_sub) do update
-      set email = coalesce(excluded.email, users.email),
-          name  = coalesce(nullif(users.name, ''), excluded.name)
-    returning id, auth0_sub, email, name, consented_at, created_at, active`;
+  // Look up first; insert only brand-new people. (An upsert on every request burned a serial id each time.)
+  const COLS = sql`id, auth0_sub, email, name, consented_at, created_at, active`;
+  let [user] = await sql<User[]>`select ${COLS} from users where auth0_sub = ${identity.sub}`;
+  if (!user) {
+    [user] = await sql<User[]>`
+      insert into users (auth0_sub, email, name) values (${identity.sub}, ${identity.email}, ${identity.name})
+      on conflict (auth0_sub) do update set email = coalesce(excluded.email, users.email)
+      returning ${COLS}`;
+  } else if (identity.email && identity.email !== user.email) {
+    [user] = await sql<User[]>`update users set email = ${identity.email} where id = ${user.id} returning ${COLS}`;
+  }
   if (!user.active) return c.json({ error: 'deactivated', message: 'Your account has been turned off. Please contact HR.' }, 403);
 
   c.set('identity', identity);
@@ -61,6 +64,16 @@ export const ATTENDANCE_COLUMNS = sql`
   a.id, a.user_id, a.day::text as day, a.marked_at, a.status, a.flags, a.distance_m, a.lat, a.lng, a.accuracy_m,
   a.address, a.photo_key, a.late_min, a.reviewed_at, a.review_note,
   s.name as site_name, s.kind as site_kind, s.lat as site_lat, s.lng as site_lng, s.radius_m as site_radius_m`;
+
+/** Company holidays in a month ("2026-11") → Map(day → name). */
+export async function holidaysIn(month: string) {
+  const rows = await sql<{ day: string; name: string }[]>`select day::text as day, name from holidays where to_char(day, 'YYYY-MM') = ${month}`;
+  return new Map(rows.map((r) => [r.day, r.name]));
+}
+export async function holidayOn(day: string) {
+  const [h] = await sql<{ name: string }[]>`select name from holidays where day = ${day}`;
+  return h?.name ?? null;
+}
 
 /** One check-in as clients see it: photo key swapped for a fresh 10-minute photo link. */
 export async function withPhoto(row: Record<string, unknown> | undefined) {

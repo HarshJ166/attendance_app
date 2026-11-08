@@ -5,7 +5,7 @@ import { CheckinPanel } from '../components/CheckinPanel';
 import { CELL, thisMonth } from '../calendar';
 import { MonthSwitch } from '../components/MonthSwitch';
 
-type Day = { day: string; weekday: number; kind: string; rejected: boolean; late_min: number; attendance_id: number | null };
+type Day = { day: string; weekday: number; kind: string; holiday?: string | null; rejected: boolean; late_min: number; attendance_id: number | null };
 type Person = {
   user: { id: number; name: string; email: string | null; employee_code: string | null; designation: string | null };
   days: Day[];
@@ -59,7 +59,7 @@ export function Register() {
               <tr>
                 <th className="sticky">Employee</th>
                 {days.map((d) => (
-                  <th key={d.day} className={`num ${d.weekday === 0 ? 'sun' : ''}`} title={d.day}>
+                  <th key={d.day} className={`num ${d.holiday ? 'hol' : d.weekday === 0 ? 'sun' : ''}`} title={d.holiday ? `${d.day}: ${d.holiday}` : d.day}>
                     {Number(d.day.slice(8))}<div className="small" style={{ fontWeight: 400 }}>{'SMTWTFS'[d.weekday]}</div>
                   </th>
                 ))}
@@ -75,7 +75,7 @@ export function Register() {
                   </th>
                   {p.days.map((d) => {
                     const look = CELL[d.rejected ? 'absent' : d.kind] ?? CELL.future;
-                    const label = `${p.user.name}, ${d.day}: ${d.rejected ? 'Rejected by HR' : look.word}${d.late_min ? `, late ${d.late_min} min` : ''}`;
+                    const label = `${p.user.name}, ${d.day}: ${d.rejected ? 'Rejected by HR' : d.kind === 'holiday' ? `Holiday, ${d.holiday}` : look.word}${d.late_min ? `, late ${d.late_min} min` : ''}`;
                     return (
                       <td key={d.day} className={`reg-cell ${look.cls}`}>
                         {d.attendance_id ? (
@@ -99,7 +99,7 @@ export function Register() {
           {data.people.length === 0 ? <div className="empty">No employees in this month.</div> : null}
         </div>
       ) : null}
-      <div className="key"><span>✓ present</span><span>! HR check</span><span>✗ absent or rejected</span><span><i style={{ background: 'var(--warn)', width: 8, height: 8 }} />late</span><span>– Sunday off</span></div>
+      <div className="key"><span>✓ present</span><span>! HR check</span><span>✗ absent or rejected</span><span><i style={{ background: 'var(--warn)', width: 8, height: 8 }} />late</span><span>– Sunday off</span><span>★ holiday</span></div>
       <span className="small muted">CSV opens in Excel with one row per person per day: status, check-in time (IST, 12-hour), late minutes, place, distance, address and HR notes.</span>
       {open != null ? <CheckinPanel id={open} onClose={() => setOpen(null)} onReviewed={reload} /> : null}
     </div>

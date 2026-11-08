@@ -81,32 +81,47 @@ export function parseFix(body: unknown): Fix | string {
 
 // ---------- Calendar ----------
 
-export type DayKind = 'present' | 'flagged' | 'absent' | 'off' | 'today' | 'future' | 'before_joining';
+export type DayKind = 'present' | 'flagged' | 'absent' | 'off' | 'holiday' | 'today' | 'future' | 'before_joining';
 export type Marked = 'present' | 'flagged' | 'rejected';
 
 const WEEKLY_OFF = new Set([0]); // Sunday only (decided 2026-11-08)
 export const weekdayOf = (day: string) => new Date(`${day}T00:00:00Z`).getUTCDay();
 
-/** What one IST calendar day ("YYYY-MM-DD") means for one person. A check-in HR rejected counts as absent. */
-export function dayKind(day: string, today: string, joined: string, marked?: Marked): DayKind {
+/**
+ * What one IST calendar day ("YYYY-MM-DD") means for one person.
+ * A check-in always wins (working on a holiday still counts as present); HR-rejected counts as absent,
+ * except on a holiday/Sunday where nobody can be absent. Upcoming holidays show as holidays.
+ */
+export function dayKind(day: string, today: string, joined: string, marked?: Marked, holiday = false): DayKind {
   if (marked === 'present' || marked === 'flagged') return marked;
-  if (marked === 'rejected') return 'absent';
-  if (day > today) return 'future';
   if (day < joined) return 'before_joining';
+  if (holiday) return 'holiday';
+  if (marked === 'rejected') return WEEKLY_OFF.has(weekdayOf(day)) ? 'off' : 'absent';
+  if (day > today) return 'future';
   if (WEEKLY_OFF.has(weekdayOf(day))) return 'off';
   if (day === today) return 'today'; // not marked yet, but the day isn't over
   return 'absent';
 }
 
-/** Every date of `month` ("2026-11"), classified for one person. */
-export function monthDays(month: string, today: string, joined: string, marked: Map<string, Marked>) {
+/** Every date of `month` ("2026-11"), classified for one person. `holidays`: day → name. */
+export function monthDays(month: string, today: string, joined: string, marked: Map<string, Marked>, holidays: Map<string, string> = new Map()) {
   const [y, m] = month.split('-').map(Number);
   const count = new Date(Date.UTC(y, m, 0)).getUTCDate();
   return Array.from({ length: count }, (_, i) => {
     const day = `${month}-${String(i + 1).padStart(2, '0')}`;
-    return { day, weekday: weekdayOf(day), kind: dayKind(day, today, joined, marked.get(day)) };
+    const holiday = holidays.get(day) ?? null;
+    return { day, weekday: weekdayOf(day), kind: dayKind(day, today, joined, marked.get(day), holiday !== null), holiday };
   });
 }
+
+/** Fixed-date national holidays (festival dates change every year, so HR adds those). */
+export const FIXED_HOLIDAYS: [string, string][] = [
+  ['01-26', 'Republic Day'],
+  ['05-01', 'Maharashtra Day'],
+  ['08-15', 'Independence Day'],
+  ['10-02', 'Gandhi Jayanti'],
+  ['12-25', 'Christmas'],
+];
 
 // ---------- CSV ----------
 

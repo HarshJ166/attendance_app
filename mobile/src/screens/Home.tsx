@@ -8,7 +8,7 @@ const greeting = (h = new Date().getHours()) => (h < 12 ? 'Good morning' : h < 1
 const today = () => new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });
 const clock = (iso: string) => new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }).toUpperCase();
 
-export function Home({ me, attendance, onMark }: { me: Me; attendance: Attendance | null; onMark: () => void }) {
+export function Home({ me, attendance, holiday, onMark }: { me: Me; attendance: Attendance | null; holiday: string | null; onMark: () => void }) {
   const first = me.name.split(' ')[0] || 'there';
   const flagged = attendance?.status === 'flagged';
 
@@ -18,6 +18,12 @@ export function Home({ me, attendance, onMark }: { me: Me; attendance: Attendanc
         <T kind="title">{greeting()}, {first}</T>
         <T kind="small">{today()}</T>
       </View>
+      {holiday ? (
+        <View style={{ backgroundColor: color.mutedTint, borderRadius: 12, padding: space.md }} accessibilityRole="text">
+          <T style={{ fontFamily: font.bodyBold }}>★ Today is a holiday: {holiday}</T>
+          {!attendance ? <T kind="small">No need to mark attendance. If you are working today, you still can.</T> : null}
+        </View>
+      ) : null}
 
       {attendance ? (
         // The receipt: status, time, and the geo-stamped selfie.

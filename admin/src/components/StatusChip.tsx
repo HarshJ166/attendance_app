@@ -6,6 +6,7 @@ const LOOK: Record<string, { glyph: string; word: string }> = {
   absent: { glyph: '✗', word: 'Absent' },
   not_yet: { glyph: '·', word: 'Not yet' },
   off: { glyph: '–', word: 'Off' },
+  holiday: { glyph: '★', word: 'Holiday' },
 };
 
 export function StatusChip({ status }: { status: string }) {

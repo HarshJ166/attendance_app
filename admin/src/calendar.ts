@@ -14,6 +14,7 @@ export const CELL: Record<string, { glyph: string; word: string; cls: string }> 
   flagged: { glyph: '!', word: 'HR check', cls: 'flagged' },
   absent: { glyph: '✗', word: 'Absent', cls: 'absent' },
   off: { glyph: 'off', word: 'Sunday off', cls: 'off' },
+  holiday: { glyph: '★', word: 'Holiday', cls: 'holiday' },
   today: { glyph: '·', word: 'Not marked yet', cls: 'not_yet' },
   future: { glyph: '', word: '', cls: 'future' },
   before_joining: { glyph: '', word: 'Before joining', cls: 'future' },

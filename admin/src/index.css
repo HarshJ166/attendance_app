@@ -97,7 +97,7 @@ textarea.input { padding: 10px 12px; min-height: 80px; resize: vertical; }
 .chip.present { background: var(--present-tint); color: var(--present); }
 .chip.flagged, .chip.late { background: var(--warn-tint); color: var(--warn); }
 .chip.absent, .chip.rejected, .chip.blocked { background: var(--danger-tint); color: var(--danger); }
-.chip.not_yet, .chip.off { background: var(--muted-tint); color: var(--muted); }
+.chip.not_yet, .chip.off, .chip.holiday { background: var(--muted-tint); color: var(--muted); }
 
 table.list { width: 100%; border-collapse: collapse; background: var(--surface); }
 .list th { text-align: left; font-size: 13px; font-weight: 600; color: var(--muted); padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
@@ -178,3 +178,9 @@ button.cal-day:hover { outline: 2px solid var(--ink); }
 .reg-cell .late-dot { position: absolute; top: -3px; right: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); border: 1.5px solid var(--surface); }
 .leaflet-tooltip.place-label { background: #fff; border: 0; box-shadow: 0 1px 4px rgba(21, 32, 27, 0.25); font: 600 13px var(--body); color: var(--ink); padding: 2px 8px; }
 .leaflet-tooltip.place-label::before { display: none; }
+
+/* holidays */
+.cal-day.holiday { background: var(--muted-tint); } .cal-day.holiday .g { color: var(--muted); font-size: 12px; }
+.cal-day .hname { font-size: 12px; color: var(--muted); line-height: 1.2; }
+.reg-cell.holiday > span { color: var(--muted); background: var(--muted-tint); }
+.register th.hol { color: var(--muted); background: var(--muted-tint); }

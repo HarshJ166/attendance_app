@@ -70,8 +70,8 @@ await step('check-in at home passes as WFH; 2 km from everything is blocked and 
   assert.equal(no.status, 403); assert.equal(no.json.error, 'outside_site'); assert.match(no.json.message, /km from ITest Office/);
   const fake = await call(E2, 'POST', '/attendance/check', { ...OFFICE, accuracy_m: 5, mocked: true });
   assert.equal(fake.json.error, 'mock_location');
-  const [{ n }] = await sql`select count(*)::int n from checkin_attempts where user_id = ${e2}`;
-  assert.equal(n, 2);
+  const rows = await sql`select id, reason, at from checkin_attempts where user_id = ${e2} order by id`;
+  assert.equal(rows.length, 2, JSON.stringify(rows));
 });
 
 let attId = 0;
@@ -89,7 +89,9 @@ await step('today board: Asha present (late), Ravi not yet, attempts counted', a
   const ravi = t.json.people.find((p: any) => p.user.id === e2);
   assert.ok(['not_yet', 'off'].includes(ravi.status), ravi.status);
   assert.equal(t.json.summary.late, 1);
-  assert.equal(t.json.summary.blocked_attempts, 2);
+  // The branch is a copy of the real DB, so count only this test's people (real attempts may exist today).
+  assert.equal(t.json.attempts.filter((x: any) => x.user_id === e2).length, 2);
+  assert.ok(t.json.summary.blocked_attempts >= 2);
 });
 
 await step('review queue lists the HR-check item with a photo thumbnail', async () => {
@@ -141,6 +143,48 @@ await step('guards: can\'t delete a place with history, can\'t turn yourself off
   assert.equal((await call(ADMIN, 'PATCH', '/admin/settings', { shift_start: '25:00', grace_min: 10 })).status, 400);
   const s = await call(ADMIN, 'PATCH', '/admin/settings', { shift_start: '10:00', grace_min: 10 });
   assert.deepEqual(s.json.settings, { shift_start: '10:00', grace_min: 10 });
+});
+
+await step('holidays: HR adds one, nobody is absent that day, register/CSV/today board show its name', async () => {
+  // A past working day (Mon–Sat) inside the current month where Ravi did not check in.
+  const today = istDay();
+  let day = '';
+  for (let n = 1; n <= 6; n++) {
+    const d = istDay(new Date(Date.now() - n * 86_400_000));
+    if (d.slice(0, 7) === today.slice(0, 7) && new Date(`${d}T00:00:00Z`).getUTCDay() !== 0) { day = d; break; }
+  }
+  if (!day) { console.log('     (skipped: no earlier working day this month yet)'); return; }
+  await sql`update users set created_at = now() - interval '20 days' where id = ${e2}`; // Ravi "joined" before that day
+  const before = (await call(ADMIN, 'GET', `/admin/register?month=${day.slice(0, 7)}`)).json.people.find((p: any) => p.user.id === e2);
+  assert.equal(before.days.find((d: any) => d.day === day).kind, 'absent');
+  assert.equal((await call(ADMIN, 'POST', '/admin/holidays', { day, name: '' })).status, 400);
+  const h = await call(ADMIN, 'POST', '/admin/holidays', { day, name: 'Diwali' });
+  assert.equal(h.status, 201);
+  const after = (await call(ADMIN, 'GET', `/admin/register?month=${day.slice(0, 7)}`)).json.people.find((p: any) => p.user.id === e2);
+  const cell = after.days.find((d: any) => d.day === day);
+  assert.deepEqual([cell.kind, cell.holiday], ['holiday', 'Diwali']);
+  assert.equal(after.summary.absent, before.summary.absent - 1);
+  const board = await call(ADMIN, 'GET', `/admin/today?date=${day}`);
+  assert.equal(board.json.holiday, 'Diwali');
+  assert.equal(board.json.people.find((p: any) => p.user.id === e2).status, 'holiday');
+  const csv = await call(ADMIN, 'GET', `/admin/export.csv?month=${day.slice(0, 7)}`);
+  assert.ok(csv.text!.includes('"Holiday: Diwali"'));
+  const mine = await call(E2, 'GET', `/attendance/month?month=${day.slice(0, 7)}`);
+  assert.equal(mine.json.days.find((d: any) => d.day === day).holiday, 'Diwali');
+  const fixed = await call(ADMIN, 'POST', '/admin/holidays/fixed', { year: '2027' });
+  assert.equal(fixed.json.added.length, 5);
+  assert.equal((await call(ADMIN, 'POST', '/admin/holidays/fixed', { year: '2027' })).json.added.length, 0); // idempotent
+  const list = await call(ADMIN, 'GET', '/admin/holidays?year=2027');
+  assert.ok(list.json.holidays.some((x: any) => x.name === 'Independence Day' && x.day === '2027-08-15'));
+  assert.equal((await call(ADMIN, 'DELETE', `/admin/holidays/${day}`)).status, 200);
+  assert.equal((await call(E1, 'GET', '/admin/holidays')).status, 403);
+});
+
+await step('repeat requests no longer burn user ids', async () => {
+  const [{ last_value: a }] = await sql`select last_value from users_id_seq`;
+  for (let i = 0; i < 5; i++) await call(E1, 'GET', '/me');
+  const [{ last_value: b }] = await sql`select last_value from users_id_seq`;
+  assert.equal(Number(b), Number(a));
 });
 
 await step('a deactivated employee is locked out of the app', async () => {

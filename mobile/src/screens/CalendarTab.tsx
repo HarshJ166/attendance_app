@@ -14,6 +14,7 @@ export const LOOK: Record<DayKind, { bg: string; fg: string; glyph: string; word
   flagged: { bg: color.warnTint, fg: color.warn, glyph: '!', word: 'Present, HR will check' },
   absent: { bg: color.dangerTint, fg: color.danger, glyph: '✗', word: 'Absent' },
   off: { bg: 'transparent', fg: color.muted, glyph: 'off', word: 'Sunday, weekly off' },
+  holiday: { bg: color.mutedTint, fg: color.muted, glyph: '★', word: 'Holiday' },
   today: { bg: color.surface, fg: color.ink, glyph: '', word: 'Not marked yet today' },
   future: { bg: 'transparent', fg: color.line, glyph: '', word: '' },
   before_joining: { bg: 'transparent', fg: color.line, glyph: '', word: 'Before you joined' },
@@ -66,7 +67,7 @@ export function CalendarTab({ getToken }: { getToken: () => Promise<string> }) {
                     <View key={d.day} style={{ width: `${100 / 7}%`, padding: 2 }}>
                       <Pressable
                         accessibilityRole="button"
-                        accessibilityLabel={`${dayName(d.day)}. ${look.word}${d.marked_at ? ` at ${clock(d.marked_at)}` : ''}`}
+                        accessibilityLabel={`${dayName(d.day)}. ${d.kind === 'holiday' && d.holiday ? `Holiday, ${d.holiday}` : look.word}${d.marked_at ? ` at ${clock(d.marked_at)}` : ''}`}
                         accessibilityState={{ selected: isSel, disabled: d.kind === 'future' }}
                         disabled={d.kind === 'future'}
                         onPress={() => void pick(d)}
@@ -95,14 +96,15 @@ export function CalendarTab({ getToken }: { getToken: () => Promise<string> }) {
                   <T kind="small">{k === 'flagged' ? 'HR check' : LOOK[k].word}</T>
                 </View>
               ))}
-              <T kind="small">off = Sunday</T>
+              <T kind="small">off = Sunday · ★ = holiday</T>
             </View>
 
             {sel ? (
               <View style={{ gap: space.md, borderTopWidth: 1, borderTopColor: color.line, paddingTop: space.lg }}>
                 <T style={{ fontFamily: font.display, fontSize: 22, lineHeight: 28 }}>{dayName(sel.day)}</T>
                 <T style={{ color: LOOK[sel.kind].fg === color.line ? color.muted : LOOK[sel.kind].fg, fontFamily: font.bodyBold }}>
-                  {LOOK[sel.kind].word}
+                  {sel.kind === 'holiday' && sel.holiday ? `Holiday: ${sel.holiday}` : LOOK[sel.kind].word}
+                  {sel.holiday && sel.kind !== 'holiday' ? ` (holiday: ${sel.holiday})` : ''}
                   {sel.marked_at ? ` · ${clock(sel.marked_at)}` : ''}
                   {sel.site_name ? ` · ${placeLabel(sel.site_name, sel.site_kind)}` : ''}
                 </T>

@@ -4,7 +4,7 @@ import { logger } from 'hono/logger';
 import { admin } from './admin.js';
 import { sql } from './db/index.js';
 import { addressFor } from './geocode.js';
-import { ATTENDANCE_COLUMNS, auth, DAY, MONTH, placesOf, todayIst, withPhoto, type Env } from './http.js';
+import { ATTENDANCE_COLUMNS, auth, DAY, holidayOn, holidaysIn, MONTH, placesOf, todayIst, withPhoto, type Env } from './http.js';
 import { blockMessage, classify, minutesLate, monthDays, parseFix, type Marked } from './rules.js';
 import { exists, isOwnSelfieKey, istDay, MAX_SELFIE_BYTES, newSelfieKey, remove, uploadUrl } from './storage.js';
 
@@ -43,7 +43,7 @@ app.get('/attendance/today', auth, async (c) => {
     select ${ATTENDANCE_COLUMNS}
     from attendance a left join sites s on s.id = a.site_id
     where a.user_id = ${c.get('user').id} and a.day = ${todayIst()}`;
-  return c.json({ attendance: await withPhoto(row) });
+  return c.json({ attendance: await withPhoto(row), holiday: await holidayOn(istDay()) });
 });
 
 // Calendar: every day of a month for the signed-in person (Sunday off; see rules.monthDays).
@@ -57,7 +57,7 @@ app.get('/attendance/month', auth, async (c) => {
     where a.user_id = ${user.id} and to_char(a.day, 'YYYY-MM') = ${month}
     order by a.day`;
   const byDay = new Map(rows.map((r) => [r.day as string, r]));
-  const days = monthDays(month, istDay(), istDay(user.created_at), new Map(rows.map((r) => [r.day as string, r.status as Marked])))
+  const days = monthDays(month, istDay(), istDay(user.created_at), new Map(rows.map((r) => [r.day as string, r.status as Marked])), await holidaysIn(month))
     .map((d) => {
       const r = byDay.get(d.day);
       return r && r.status !== 'rejected'
@@ -66,7 +66,7 @@ app.get('/attendance/month', auth, async (c) => {
     });
   const count = (k: string) => days.filter((d) => d.kind === k).length;
   const late = rows.filter((r) => r.status !== 'rejected' && r.late_min > 0).length;
-  return c.json({ month, days, summary: { present: count('present'), flagged: count('flagged'), absent: count('absent'), late } });
+  return c.json({ month, days, summary: { present: count('present'), flagged: count('flagged'), absent: count('absent'), late, holidays: count('holiday') } });
 });
 
 // One day's full record incl. photo link (own records only).
