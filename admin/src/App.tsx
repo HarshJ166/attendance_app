@@ -39,7 +39,7 @@ export default function App() {
     return (
       <div className="center">
         <div className="login">
-          <div className="brand">GeoMark <span>HR panel</span></div>
+          <div className="brand">GeoMark <span className="brand-sub">HR panel</span></div>
           <p className="muted">Attendance, selfies and locations for your team. HR access only.</p>
           {error ? <div className="notice error">{error.message}</div> : null}
           <button className="btn" onClick={() => void loginWithRedirect()}>Log in</button>
@@ -65,7 +65,7 @@ function Shell({ name, onLogout }: { name: string; onLogout: () => void }) {
     return (
       <div className="center">
         <div className="login">
-          <div className="brand">GeoMark <span>HR panel</span></div>
+          <div className="brand">GeoMark <span className="brand-sub">HR panel</span></div>
           <div className="notice error">This panel is for HR only. Your account doesn’t have admin access.</div>
           <button className="btn secondary" onClick={onLogout}>Log out</button>
         </div>
@@ -77,9 +77,15 @@ function Shell({ name, onLogout }: { name: string; onLogout: () => void }) {
   return (
     <div className={`shell ${collapsed ? 'collapsed' : ''}`}>
       <nav className="nav" aria-label="Main">
-        <div className="brand">
-          <span className="brand-full">GeoMark <span>HR panel</span></span>
-          <span className="brand-mark" aria-hidden="true">G</span>
+        <div className="nav-head">
+          <div className="brand">
+            <span className="brand-full">GeoMark <span className="brand-sub">HR panel</span></span>
+            <span className="brand-mark" aria-hidden="true">G</span>
+          </div>
+          <button className="icon-btn nav-toggle" onClick={() => { setCollapsed(!collapsed); saveCollapsed(!collapsed); }}
+            aria-label={collapsed ? 'Expand menu' : 'Collapse menu'} title={collapsed ? 'Expand menu' : 'Collapse menu'}>
+            <Icon name={collapsed ? 'expand' : 'collapse'} size={18} />
+          </button>
         </div>
         {NAV.map((n) => (
           <a key={n.hash} href={n.hash} aria-current={n.match.includes(page.name) ? 'page' : undefined} title={collapsed ? n.label : undefined} aria-label={n.label}>
@@ -89,13 +95,12 @@ function Shell({ name, onLogout }: { name: string; onLogout: () => void }) {
           </a>
         ))}
         <div className="nav-foot">
-          <span className="nav-label who-am-i">{name}</span>
-          <button className="btn secondary small" onClick={onLogout} title="Log out" aria-label="Log out">
-            <Icon name="logout" size={18} /><span className="nav-label">Log out</span>
-          </button>
-          <button className="btn secondary small nav-toggle" onClick={() => { setCollapsed(!collapsed); saveCollapsed(!collapsed); }}
-            aria-label={collapsed ? 'Expand menu' : 'Collapse menu'} title={collapsed ? 'Expand menu' : 'Collapse menu'}>
-            <Icon name={collapsed ? 'expand' : 'collapse'} size={18} /><span className="nav-label">Collapse</span>
+          <div className="me" title={name}>
+            <span className="me-initial" aria-hidden="true">{(name.trim()[0] ?? '?').toUpperCase()}</span>
+            <span className="nav-label me-name">{name}</span>
+          </div>
+          <button className="icon-btn" onClick={onLogout} title="Log out" aria-label="Log out">
+            <Icon name="logout" size={18} />
           </button>
         </div>
       </nav>

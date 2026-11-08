@@ -204,6 +204,18 @@ await step('Settings → add a holiday + fixed national holidays', async () => {
   await page.getByRole('cell', { name: 'Christmas' }).waitFor();
   await noCrash(); await shot('11-holidays');
 });
+await step('Sidebar: collapse to icons and back', async () => {
+  await page.goto('http://localhost:5173/#/');
+  await page.getByRole('heading', { name: 'Today' }).waitFor({ timeout: 15000 });
+  await page.screenshot({ path: `${OUT}/12-sidebar-open.png`, clip: { x: 0, y: 0, width: 300, height: 900 } });
+  await page.getByRole('button', { name: 'Collapse menu' }).click();
+  await page.getByRole('button', { name: 'Expand menu' }).waitFor();
+  if (await page.locator('.brand-full').isVisible()) throw new Error('wordmark still visible when collapsed');
+  await page.screenshot({ path: `${OUT}/13-sidebar-collapsed.png`, clip: { x: 0, y: 0, width: 300, height: 900 } });
+  await page.getByRole('button', { name: 'Expand menu' }).click();
+  await page.getByRole('button', { name: 'Collapse menu' }).waitFor();
+  console.log('  📸 12-sidebar-open, 13-sidebar-collapsed');
+});
 await step('Deep link reload keeps the page (#/places)', async () => {
   await page.goto('http://localhost:5173/#/places');
   await page.getByRole('heading', { name: 'Places' }).waitFor({ timeout: 15000 });
