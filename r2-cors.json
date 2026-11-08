@@ -2,9 +2,16 @@
   "rules": [
     {
       "allowed": {
-        "origins": ["http://localhost:5173"],
-        "methods": ["PUT"],
-        "headers": ["content-type"]
+        "origins": [
+          "http://localhost:5173",
+          "https://geomark-admin.work-harsh268.workers.dev"
+        ],
+        "methods": [
+          "PUT"
+        ],
+        "headers": [
+          "content-type"
+        ]
       },
       "maxAgeSeconds": 3600
     }

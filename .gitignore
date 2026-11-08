@@ -17,3 +17,8 @@ face/.venv/
 face/__pycache__/
 face/models/
 .render-key
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
