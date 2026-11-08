@@ -1,6 +1,6 @@
-import L from 'leaflet';
 import { useEffect, useRef } from 'react';
 import { distance, placeLabel, time, type Place } from '../api';
+import { chip, dot, mountMap } from '../geomap';
 
 const C = { present: '#0b6b4b', ink: '#15201b', danger: '#b3261e', muted: '#52615a' };
 
@@ -11,7 +11,7 @@ const haversine = (a: { lat: number; lng: number }, b: { lat: number; lng: numbe
 };
 
 /**
- * Interactive OpenStreetMap: all of the person's places (circles), their pin + GPS accuracy ring,
+ * Interactive map (Mappls, else OpenStreetMap): all of the person's places (circles), their pin + GPS accuracy ring,
  * a dashed line to the nearest place with the distance, and that day's blocked attempts.
  */
 export function CheckinMap({ person, places, matchedName, attempts = [] }: {
@@ -26,46 +26,31 @@ export function CheckinMap({ person, places, matchedName, attempts = [] }: {
 
   useEffect(() => {
     if (!el.current) return;
-    // Bounds straight from coordinates + radius (no layers needed), then the first view WITHOUT animation:
-    // Leaflet only attaches layers once a view exists, and an animation still running at unmount throws _leaflet_pos.
-    const bounds = L.latLng(person.lat, person.lng).toBounds(Math.max(person.accuracy_m, 30) * 2);
-    for (const p of places) bounds.extend(L.latLng(p.lat, p.lng).toBounds(p.radius_m * 2));
-    for (const a of attempts) bounds.extend([a.lat, a.lng]);
-    const map = L.map(el.current, { scrollWheelZoom: false, attributionControl: true }).fitBounds(bounds, { padding: [32, 32], maxZoom: 18, animate: false });
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(map);
+    return mountMap(el.current, { center: person, zoom: 16, scrollZoom: false }, (map) => {
+      const ranked = places.map((p) => ({ p, d: haversine(person, p) })).sort((a, b) => a.d - b.d);
+      const inside = ranked.find((r) => r.d - person.accuracy_m <= r.p.radius_m);
+      const pin = inside ? C.present : C.danger;
+      map.fit([{ ...person, r: Math.max(person.accuracy_m, 30) }, ...places.map((p) => ({ ...p, r: p.radius_m })), ...attempts], 18);
 
-    const ranked = places.map((p) => ({ p, d: haversine(person, p) })).sort((a, b) => a.d - b.d);
-    const inside = ranked.find((r) => r.d - person.accuracy_m <= r.p.radius_m);
-    const pin = inside ? C.present : C.danger;
+      for (const { p } of ranked) {
+        const isMatch = p.name === matchedName;
+        map.area(p, p.radius_m, { color: isMatch ? C.present : C.ink, opacity: isMatch ? 1 : 0.5, fillOpacity: isMatch ? 0.12 : 0.05 });
+        map.marker(p, dot({ size: 10, fill: C.ink, title: `${placeLabel(p.name, p.kind)} · ${p.radius_m} m area` }));
+      }
 
-    for (const { p } of ranked) {
-      const isMatch = p.name === matchedName;
-      const circle = L.circle([p.lat, p.lng], { radius: p.radius_m, color: isMatch ? C.present : C.ink, weight: 2, opacity: isMatch ? 1 : 0.5, fillOpacity: isMatch ? 0.12 : 0.05 }).addTo(map);
-      circle.bindTooltip(`${placeLabel(p.name, p.kind)} · ${p.radius_m} m area`, { direction: 'top' });
-      L.circleMarker([p.lat, p.lng], { radius: 5, color: '#fff', weight: 2, fillColor: C.ink, fillOpacity: 1 }).addTo(map);
-    }
+      const nearest = inside ?? ranked[0];
+      if (nearest && nearest.d > 15) {
+        map.dashed(nearest.p, person, C.ink);
+        map.marker({ lat: (nearest.p.lat + person.lat) / 2, lng: (nearest.p.lng + person.lng) / 2 }, chip(distance(nearest.d)));
+      }
 
-    const nearest = inside ?? ranked[0];
-    if (nearest && nearest.d > 15) {
-      L.polyline([[nearest.p.lat, nearest.p.lng], [person.lat, person.lng]], { color: C.ink, weight: 2, dashArray: '6 6', opacity: 0.7 })
-        .addTo(map)
-        .bindTooltip(distance(nearest.d), { permanent: true, direction: 'center', className: 'dist-label' });
-    }
+      map.area(person, person.accuracy_m, { color: pin, fillOpacity: 0.18, stroke: false });
+      map.marker(person, dot({ size: 16, fill: pin, ringW: 3, title: `Check-in · GPS ±${Math.round(person.accuracy_m)} m` }));
 
-    L.circle([person.lat, person.lng], { radius: person.accuracy_m, stroke: false, fillColor: pin, fillOpacity: 0.18 }).addTo(map);
-    L.circleMarker([person.lat, person.lng], { radius: 8, color: '#fff', weight: 3, fillColor: pin, fillOpacity: 1 })
-      .addTo(map)
-      .bindTooltip(`Check-in · GPS ±${Math.round(person.accuracy_m)} m`, { direction: 'top' });
-
-    for (const a of attempts) {
-      L.circleMarker([a.lat, a.lng], { radius: 6, color: C.danger, weight: 2, fillOpacity: 0 })
-        .addTo(map)
-        .bindTooltip(`Blocked at ${time(a.at)}${a.distance_m != null ? ` · ${distance(a.distance_m)} away` : ''}`, { direction: 'top' });
-    }
-
-    return () => {
-      map.remove();
-    };
+      for (const a of attempts) {
+        map.marker(a, dot({ size: 12, fill: C.danger, ring: C.danger, hollow: true, title: `Blocked at ${time(a.at)}${a.distance_m != null ? ` · ${distance(a.distance_m)} away` : ''}` }));
+      }
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 

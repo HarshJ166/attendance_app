@@ -1,7 +1,7 @@
-import L from 'leaflet';
 import { useEffect, useRef, useState } from 'react';
 import { placeLabel, useApi, useLoad, type Place } from '../api';
 import { PlacePicker, type Pin } from '../components/PlacePicker';
+import { dot, mountMap } from '../geomap';
 
 type SiteRow = Place & { people: { id: number; name: string }[] };
 
@@ -52,19 +52,16 @@ function AllPlacesMap({ sites }: { sites: SiteRow[] }) {
   const key = JSON.stringify(sites.map((s) => [s.id, s.lat, s.lng, s.radius_m, s.kind]));
   useEffect(() => {
     if (!el.current || !sites.length) return;
-    // View first, without animation (an animation still running when React unmounts the map throws _leaflet_pos).
-    const b = L.latLngBounds(sites.map((s) => L.latLng(s.lat, s.lng).toBounds(s.radius_m * 2)).flatMap((x) => [x.getSouthWest(), x.getNorthEast()]));
-    const m = L.map(el.current, { scrollWheelZoom: false }).fitBounds(b, { padding: [32, 32], maxZoom: 16, animate: false });
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(m);
-    for (const s of sites) {
-      const c = L.circle([s.lat, s.lng], { radius: s.radius_m, color: s.kind === 'home' ? '#52615a' : '#0b6b4b', weight: 2, fillOpacity: 0.12 }).addTo(m);
-      c.bindTooltip(placeLabel(s.name, s.kind) + (s.kind === 'home' ? ` · ${s.name}` : ''), { direction: 'top' });
-      // Circles are tiny when zoomed out to show far-apart branches, so every place also gets a labelled pin.
-      L.circleMarker([s.lat, s.lng], { radius: 7, color: '#fff', weight: 2, fillColor: s.kind === 'home' ? '#52615a' : '#0b6b4b', fillOpacity: 1 })
-        .addTo(m)
-        .bindTooltip(s.kind === 'home' ? `Home · ${s.name.replace(/ – home$/, '')}` : s.name, { permanent: true, direction: 'right', offset: [8, 0], className: 'place-label' });
-    }
-    return () => { m.remove(); };
+    return mountMap(el.current, { center: sites[0], zoom: 12, scrollZoom: false }, (map) => {
+      map.fit(sites.map((s) => ({ ...s, r: s.radius_m })), 16);
+      for (const s of sites) {
+        const color = s.kind === 'home' ? '#52615a' : '#0b6b4b';
+        map.area(s, s.radius_m, { color, fillOpacity: 0.12 });
+        // Circles are tiny when zoomed out to show far-apart branches, so every place also gets a labelled pin.
+        const label = s.kind === 'home' ? `Home · ${s.name.replace(/ – home$/, '')}` : s.name;
+        map.marker(s, dot({ size: 14, fill: color, label, title: `${placeLabel(s.name, s.kind)} · ${s.radius_m} m area` }));
+      }
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
   if (!sites.length) return null;

@@ -1,6 +1,6 @@
-import L from 'leaflet';
 import { useEffect, useRef, useState } from 'react';
 import { useApi } from '../api';
+import { mountMap, type GeoMap, type Handle } from '../geomap';
 
 export type Pin = { lat: number; lng: number; radius_m: number };
 
@@ -10,8 +10,9 @@ export type Pin = { lat: number; lng: number; radius_m: number };
  */
 export function PlacePicker({ value, onChange }: { value: Pin | null; onChange: (p: Pin) => void }) {
   const el = useRef<HTMLDivElement>(null);
-  const map = useRef<L.Map | null>(null);
-  const layer = useRef<{ marker: L.Marker; circle: L.Circle } | null>(null);
+  const map = useRef<GeoMap | null>(null);
+  const [ready, setReady] = useState(false); // the map loads async (Mappls SDK)
+  const layer = useRef<{ marker: Handle; circle: Handle } | null>(null);
   const latest = useRef({ value, onChange });
   useEffect(() => {
     latest.current = { value, onChange }; // map callbacks read the newest value without re-creating the map
@@ -24,17 +25,20 @@ export function PlacePicker({ value, onChange }: { value: Pin | null; onChange: 
   // Create the map once.
   useEffect(() => {
     if (!el.current) return;
-    const m = L.map(el.current).setView([19.0760, 72.8777], 11); // Mumbai until a pin exists
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(m);
-    m.on('click', (e: L.LeafletMouseEvent) => {
-      const { value: v, onChange: set } = latest.current;
-      set({ lat: +e.latlng.lat.toFixed(6), lng: +e.latlng.lng.toFixed(6), radius_m: v?.radius_m ?? 150 });
+    const v = latest.current.value;
+    const stop = mountMap(el.current, { center: v ?? { lat: 19.076, lng: 72.8777 }, zoom: v ? 17 : 11 }, (m) => { // Mumbai until a pin exists
+      m.onClick((p) => {
+        const { value: cur, onChange: set } = latest.current;
+        set({ lat: +p.lat.toFixed(6), lng: +p.lng.toFixed(6), radius_m: cur?.radius_m ?? 150 });
+      });
+      map.current = m;
+      setReady(true);
     });
-    map.current = m;
     return () => {
-      m.remove();
+      stop();
       map.current = null;
       layer.current = null;
+      setReady(false);
     };
   }, []);
 
@@ -43,23 +47,18 @@ export function PlacePicker({ value, onChange }: { value: Pin | null; onChange: 
     const m = map.current;
     if (!m || !value) return;
     if (!layer.current) {
-      const marker = L.marker([value.lat, value.lng], {
-        draggable: true,
-        icon: L.divIcon({ className: '', html: '<div class="pick-pin"></div>', iconSize: [22, 22], iconAnchor: [11, 11] }),
-      }).addTo(m);
-      marker.on('dragend', () => {
-        const p = marker.getLatLng();
+      const circle = m.area(value, value.radius_m, { color: '#0b6b4b', fillOpacity: 0.12 });
+      const marker = m.marker(value, '<div class="pick-pin"></div>', (p) => {
         const { value: v, onChange: set } = latest.current;
         set({ lat: +p.lat.toFixed(6), lng: +p.lng.toFixed(6), radius_m: v?.radius_m ?? 150 });
       });
-      const circle = L.circle([value.lat, value.lng], { radius: value.radius_m, color: '#0b6b4b', weight: 2, fillOpacity: 0.12 }).addTo(m);
       layer.current = { marker, circle };
-      m.fitBounds(L.latLng(value.lat, value.lng).toBounds(value.radius_m * 2), { padding: [40, 40], maxZoom: 17, animate: false });
+      m.fit([{ ...value, r: value.radius_m }], 17);
     } else {
-      layer.current.marker.setLatLng([value.lat, value.lng]);
-      layer.current.circle.setLatLng([value.lat, value.lng]).setRadius(value.radius_m);
+      layer.current.marker.move(value);
+      layer.current.circle.move(value, value.radius_m);
     }
-  }, [value]);
+  }, [value, ready]);
 
   // Not a <form>: this sits inside the place editor's form, and nested forms make Enter submit the outer one.
   async function search() {
@@ -79,7 +78,7 @@ export function PlacePicker({ value, onChange }: { value: Pin | null; onChange: 
 
   function choose(r: { lat: number; lng: number }) {
     onChange({ lat: +r.lat.toFixed(6), lng: +r.lng.toFixed(6), radius_m: value?.radius_m ?? 150 });
-    map.current?.setView([r.lat, r.lng], 17, { animate: false });
+    map.current?.fit([{ ...r, r: value?.radius_m ?? 150 }], 17); // whole allowed area in view
     setResults(null);
   }
 

@@ -38,6 +38,9 @@ await page.route('http://localhost:8787/**', (route) => route.continue({ url: ro
 await page.route('**/*.r2.cloudflarestorage.com/**', (route) => route.fulfill({ status: 200, contentType: 'image/svg+xml',
   body: '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="400"><rect width="100%" height="100%" fill="#9fb2a8"/><circle cx="150" cy="150" r="60" fill="#e3f1ea"/><rect x="70" y="230" width="160" height="140" rx="70" fill="#e3f1ea"/></svg>' }));
 
+// QA_NO_MAPPLS=1: block the Mappls SDK to prove the OpenStreetMap fallback works.
+if (process.env.QA_NO_MAPPLS) await page.route('https://sdk.mappls.com/**', (route) => route.abort());
+
 const shot = async (name) => {
   await page.waitForTimeout(900); // let tiles/fonts settle
   await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
@@ -98,11 +101,14 @@ await step('Dashboard → one-click Approve on an HR-check row', async () => {
 await step('Dashboard → View panel with map', async () => {
   await page.getByRole('row', { name: /Ravi Shah/ }).getByRole('button', { name: 'View' }).click();
   await page.getByRole('dialog', { name: 'Check-in details' }).waitFor();
-  await page.locator('.leaflet-container').first().waitFor();
+  await page.locator('.map[data-map]').first().waitFor();
   // The selfie must actually be VISIBLE (this regressed once: rendered but squashed to 0 px tall).
   const selfieH = await page.evaluate(() => Math.round(document.querySelector('.panel .stamp')?.getBoundingClientRect().height ?? 0));
   if (selfieH < 200) throw new Error(`check-in selfie is only ${selfieH}px tall in the View panel`);
   await noCrash(); await shot('2-view-panel');
+  await page.locator('.panel .map').scrollIntoViewIfNeeded();
+  await page.waitForTimeout(1200);
+  await page.locator('.panel .map').screenshot({ path: `${OUT}/2c-checkin-map.png` });
   await page.getByRole('button', { name: 'Open the selfie full screen' }).click();
   await page.locator('.lightbox img').waitFor();
   await shot('2b-photo-full-screen');
@@ -160,13 +166,15 @@ await step('Employee profile (Asha)', async () => {
 await step('Profile → click a calendar day opens the check-in', async () => {
   await page.locator('button.cal-day').first().click();
   await page.getByRole('dialog', { name: 'Check-in details' }).waitFor();
-  await page.locator('.leaflet-container').first().waitFor();
+  await page.locator('.map[data-map]').first().waitFor();
   await page.getByRole('button', { name: 'Close details' }).click();
 });
 await step('Places', async () => {
   await page.getByRole('link', { name: 'Places' }).click();
   await page.getByRole('heading', { name: 'Places' }).waitFor();
-  await page.locator('.leaflet-container').first().waitFor();
+  await page.locator('.map[data-map]').first().waitFor();
+  console.log(`  🗺  map engine: ${await page.locator('.map[data-map]').first().getAttribute('data-map')}`);
+  await page.waitForTimeout(1500); // let map tiles paint before the screenshot
   await noCrash(); await shot('7-places');
 });
 await step('Places → Edit place (map picker) + paste coordinates', async () => {
